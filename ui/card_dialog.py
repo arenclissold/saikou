@@ -1,5 +1,8 @@
 # Card creator dialog for Saikou
 
+import os
+import re
+
 from aqt.qt import (
     QDialog,
     QVBoxLayout,
@@ -17,12 +20,13 @@ from aqt.qt import (
     Qt,
 )
 from aqt import mw
+from aqt.sound import av_player
 from anki.notes import Note
 
 from ..models.note_type import get_or_create_note_type, FIELDS
 from ..services.jmdict import lookup_word
 from ..services.openai_client import generate_sentence, translate_sentence
-from ..services.audio import generate_word_audio, generate_sentence_audio
+from ..services.audio import generate_word_audio, generate_sentence_audio, get_media_folder
 
 
 class LookupWorker(QThread):
@@ -118,7 +122,12 @@ class CardCreatorDialog(QDialog):
         # Sentence Audio
         sentence_audio_layout = QHBoxLayout()
         sentence_audio_layout.addWidget(self.sentence_audio_label)
-        self.generate_sentence_audio_btn = QPushButton("Generate Audio")
+        self.play_sentence_audio_btn = QPushButton("▶")
+        self.play_sentence_audio_btn.setFixedWidth(30)
+        self.play_sentence_audio_btn.clicked.connect(self._play_sentence_audio)
+        self.play_sentence_audio_btn.setEnabled(False)
+        sentence_audio_layout.addWidget(self.play_sentence_audio_btn)
+        self.generate_sentence_audio_btn = QPushButton("Generate")
         self.generate_sentence_audio_btn.clicked.connect(self._generate_sentence_audio)
         sentence_audio_layout.addWidget(self.generate_sentence_audio_btn)
         form_layout.addRow("Sentence Audio:", sentence_audio_layout)
@@ -126,7 +135,12 @@ class CardCreatorDialog(QDialog):
         # Word Audio
         word_audio_layout = QHBoxLayout()
         word_audio_layout.addWidget(self.word_audio_label)
-        self.generate_word_audio_btn = QPushButton("Generate Audio")
+        self.play_word_audio_btn = QPushButton("▶")
+        self.play_word_audio_btn.setFixedWidth(30)
+        self.play_word_audio_btn.clicked.connect(self._play_word_audio)
+        self.play_word_audio_btn.setEnabled(False)
+        word_audio_layout.addWidget(self.play_word_audio_btn)
+        self.generate_word_audio_btn = QPushButton("Generate")
         self.generate_word_audio_btn.clicked.connect(self._generate_word_audio)
         word_audio_layout.addWidget(self.generate_word_audio_btn)
         form_layout.addRow("Word Audio:", word_audio_layout)
@@ -155,6 +169,29 @@ class CardCreatorDialog(QDialog):
         button_layout.addWidget(self.cancel_btn)
 
         layout.addLayout(button_layout)
+
+    def _get_audio_path(self, sound_tag: str) -> str:
+        """Extract the full file path from a sound tag."""
+        # Extract filename from [sound:filename.mp3]
+        match = re.search(r'\[sound:(.+?)\]', sound_tag)
+        if match:
+            filename = match.group(1)
+            return os.path.join(get_media_folder(), filename)
+        return ""
+
+    def _play_sentence_audio(self):
+        """Play the generated sentence audio."""
+        if self.sentence_audio_tag:
+            audio_path = self._get_audio_path(self.sentence_audio_tag)
+            if audio_path and os.path.exists(audio_path):
+                av_player.play_file(audio_path)
+
+    def _play_word_audio(self):
+        """Play the generated word audio."""
+        if self.word_audio_tag:
+            audio_path = self._get_audio_path(self.word_audio_tag)
+            if audio_path and os.path.exists(audio_path):
+                av_player.play_file(audio_path)
 
     def _on_word_changed(self, text: str):
         """Handle target word changes - debounced auto-lookup."""
@@ -253,6 +290,7 @@ class CardCreatorDialog(QDialog):
         try:
             self.sentence_audio_tag = generate_sentence_audio(sentence)
             self.sentence_audio_label.setText("Generated ✓")
+            self.play_sentence_audio_btn.setEnabled(True)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to generate audio:\n{str(e)}")
         finally:
@@ -272,6 +310,7 @@ class CardCreatorDialog(QDialog):
         try:
             self.word_audio_tag = generate_word_audio(word)
             self.word_audio_label.setText("Generated ✓")
+            self.play_word_audio_btn.setEnabled(True)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to generate audio:\n{str(e)}")
         finally:
@@ -312,12 +351,14 @@ class CardCreatorDialog(QDialog):
             if not self.word_audio_tag:
                 self.word_audio_tag = generate_word_audio(word)
                 self.word_audio_label.setText("Generated ✓")
+                self.play_word_audio_btn.setEnabled(True)
 
             # 5. Generate sentence audio if not generated
             sentence = self.sentence_input.toPlainText().strip()
             if sentence and not self.sentence_audio_tag:
                 self.sentence_audio_tag = generate_sentence_audio(sentence)
                 self.sentence_audio_label.setText("Generated ✓")
+                self.play_sentence_audio_btn.setEnabled(True)
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to generate fields:\n{str(e)}")
@@ -371,6 +412,8 @@ class CardCreatorDialog(QDialog):
         self.word_audio_tag = ""
         self.sentence_audio_label.setText("Not generated")
         self.word_audio_label.setText("Not generated")
+        self.play_sentence_audio_btn.setEnabled(False)
+        self.play_word_audio_btn.setEnabled(False)
 
     def closeEvent(self, event):
         """Clean up on close."""
