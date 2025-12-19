@@ -30,7 +30,7 @@ def open_field_mapping():
 # Create Saikou submenu under Tools
 saikou_menu = QMenu("Saikou", mw)
 
-create_action = QAction("Create Japanese Card", mw)
+create_action = QAction("Create Card", mw)
 create_action.triggered.connect(open_card_creator)
 saikou_menu.addAction(create_action)
 

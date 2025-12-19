@@ -107,7 +107,7 @@ class CardCreatorDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Saikou - Create Japanese Card")
+        self.setWindowTitle("Saikou - Create Card")
         self.setMinimumWidth(1000)
         self.setMinimumHeight(700)
 
@@ -221,6 +221,21 @@ class CardCreatorDialog(QDialog):
         title_label = QLabel("Card Creator")
         title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
         layout.addWidget(title_label)
+
+        # Deck display
+        deck_info_layout = QHBoxLayout()
+        deck_info_layout.setSpacing(5)
+        deck_label = QLabel("Deck:")
+        deck_label.setStyleSheet("font-weight: bold;")
+        deck_info_layout.addWidget(deck_label)
+        self.deck_display_label = QLabel("(Not configured)")
+        self.deck_display_label.setStyleSheet("color: #888;")
+        deck_info_layout.addWidget(self.deck_display_label)
+        deck_info_layout.addStretch()
+        layout.addLayout(deck_info_layout)
+
+        # Update deck display
+        self._update_deck_display()
 
         # Form layout for fields
         form_layout = QFormLayout()
@@ -337,6 +352,18 @@ class CardCreatorDialog(QDialog):
         layout.addLayout(button_layout)
 
         return panel
+
+    def _update_deck_display(self):
+        """Update the deck display label based on field mapping configuration."""
+        field_mapping = get_field_mapping()
+        deck_name = field_mapping.get("deck_name", "")
+
+        if deck_name:
+            self.deck_display_label.setText(deck_name)
+            self.deck_display_label.setStyleSheet("")
+        else:
+            self.deck_display_label.setText("(Not configured)")
+            self.deck_display_label.setStyleSheet("color: #888;")
 
     def _on_search_changed(self, text: str):
         """Handle dictionary search input changes - debounced."""
