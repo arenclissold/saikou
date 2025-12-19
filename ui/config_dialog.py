@@ -94,23 +94,17 @@ class ConfigDialog(QDialog):
         # Form layout
         form_layout = QFormLayout()
 
-        # OpenAI API Key
+        # OpenAI API Key with Show/Hide button
+        api_key_layout = QHBoxLayout()
         self.api_key_input = QLineEdit()
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.api_key_input.setPlaceholderText("sk-...")
-        form_layout.addRow("OpenAI API Key:", self.api_key_input)
-
-        # Show/Hide API Key button
-        api_key_layout = QHBoxLayout()
+        api_key_layout.addWidget(self.api_key_input)
         self.show_key_btn = QPushButton("Show")
         self.show_key_btn.setCheckable(True)
         self.show_key_btn.toggled.connect(self._toggle_api_key_visibility)
-        api_key_layout.addWidget(self.api_key_input)
         api_key_layout.addWidget(self.show_key_btn)
         form_layout.addRow("OpenAI API Key:", api_key_layout)
-
-        # Remove the duplicate row we added above
-        form_layout.removeRow(0)
 
         # OpenAI Model
         self.model_combo = QComboBox()
