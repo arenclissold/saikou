@@ -11,6 +11,9 @@ from aqt.qt import (
     QPushButton,
     QMessageBox,
     QProgressDialog,
+    QTimer,
+    QThread,
+    pyqtSignal,
     Qt,
 )
 from aqt import mw
@@ -22,6 +25,24 @@ from ..services.openai_client import generate_sentence, translate_sentence
 from ..services.audio import generate_word_audio, generate_sentence_audio
 
 
+class LookupWorker(QThread):
+    """Worker thread for async dictionary lookup."""
+
+    finished = pyqtSignal(str)  # definition or empty string
+
+    def __init__(self, word: str):
+        super().__init__()
+        self.word = word
+
+    def run(self):
+        """Perform the lookup in background thread."""
+        try:
+            definition = lookup_word(self.word)
+            self.finished.emit(definition or "")
+        except Exception:
+            self.finished.emit("")
+
+
 class CardCreatorDialog(QDialog):
     """Dialog for creating Japanese vocabulary cards with AI assistance."""
 
@@ -30,6 +51,15 @@ class CardCreatorDialog(QDialog):
         self.setWindowTitle("Saikou - Create Japanese Card")
         self.setMinimumWidth(500)
         self.setMinimumHeight(400)
+
+        # Debounce timer for word lookup
+        self._lookup_timer = QTimer()
+        self._lookup_timer.setSingleShot(True)
+        self._lookup_timer.setInterval(300)  # 300ms debounce
+        self._lookup_timer.timeout.connect(self._do_lookup)
+
+        # Current lookup worker
+        self._lookup_worker = None
 
         self._setup_ui()
 
@@ -73,7 +103,7 @@ class CardCreatorDialog(QDialog):
         # Definition
         definition_layout = QHBoxLayout()
         self.definition_input = QTextEdit()
-        self.definition_input.setPlaceholderText("Definition (will be looked up from JMDict)")
+        self.definition_input.setPlaceholderText("Definition (auto-looked up from Jisho)")
         self.definition_input.setMaximumHeight(80)
         definition_layout.addWidget(self.definition_input)
         self.lookup_definition_btn = QPushButton("Lookup")
@@ -127,23 +157,48 @@ class CardCreatorDialog(QDialog):
         layout.addLayout(button_layout)
 
     def _on_word_changed(self, text: str):
-        """Handle target word changes - auto-lookup definition."""
+        """Handle target word changes - debounced auto-lookup."""
+        # Cancel any pending lookup
+        self._lookup_timer.stop()
+
         if text.strip():
-            self._lookup_definition()
+            # Start debounce timer
+            self._lookup_timer.start()
+
+    def _do_lookup(self):
+        """Perform the actual lookup (called after debounce)."""
+        word = self.word_input.text().strip()
+        if not word:
+            return
+
+        # Cancel any running worker
+        if self._lookup_worker and self._lookup_worker.isRunning():
+            self._lookup_worker.terminate()
+            self._lookup_worker.wait()
+
+        # Start new worker
+        self._lookup_worker = LookupWorker(word)
+        self._lookup_worker.finished.connect(self._on_lookup_finished)
+        self._lookup_worker.start()
+
+    def _on_lookup_finished(self, definition: str):
+        """Handle lookup result from worker thread."""
+        if definition:
+            self.definition_input.setPlainText(definition)
+        # Don't clear if no definition - user might have typed something
 
     def _lookup_definition(self):
-        """Look up the word definition in JMDict."""
+        """Manual lookup button - also async."""
         word = self.word_input.text().strip()
         if not word:
             QMessageBox.warning(self, "Warning", "Please enter a target word first.")
             return
 
-        definition = lookup_word(word)
-        if definition:
-            self.definition_input.setPlainText(definition)
-        else:
-            self.definition_input.setPlainText("")
-            # Don't show error - word might not be in dictionary
+        # Cancel any pending debounced lookup
+        self._lookup_timer.stop()
+
+        # Do immediate lookup
+        self._do_lookup()
 
     def _generate_sentence(self):
         """Generate an example sentence using OpenAI."""
@@ -316,3 +371,11 @@ class CardCreatorDialog(QDialog):
         self.word_audio_tag = ""
         self.sentence_audio_label.setText("Not generated")
         self.word_audio_label.setText("Not generated")
+
+    def closeEvent(self, event):
+        """Clean up on close."""
+        self._lookup_timer.stop()
+        if self._lookup_worker and self._lookup_worker.isRunning():
+            self._lookup_worker.terminate()
+            self._lookup_worker.wait()
+        super().closeEvent(event)
