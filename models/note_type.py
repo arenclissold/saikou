@@ -1,7 +1,5 @@
 # Note type management for Saikou
 
-from typing import Optional
-
 from anki.models import NotetypeDict
 from aqt import mw
 
@@ -99,11 +97,3 @@ def create_note_type() -> NotetypeDict:
     mw.col.models.add(model)
 
     return model
-
-
-def get_note_type_id() -> Optional[int]:
-    """Get the ID of the Saikou Japanese note type."""
-    model = mw.col.models.by_name(NOTE_TYPE_NAME)
-    if model:
-        return model["id"]
-    return None

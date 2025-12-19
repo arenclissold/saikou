@@ -184,8 +184,3 @@ def search_words(query: str, limit: int = 10) -> List[Dict]:
         pass
 
     return results
-
-
-def reload_jmdict():
-    """No-op for API-based lookup (kept for compatibility)."""
-    pass

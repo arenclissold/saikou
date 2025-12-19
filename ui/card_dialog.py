@@ -20,7 +20,6 @@ from aqt.qt import (
     QListWidget,
     QListWidgetItem,
     QSplitter,
-    QFrame,
     pyqtSignal,
     Qt,
 )
@@ -28,7 +27,7 @@ from aqt import mw
 from aqt.sound import av_player
 from anki.notes import Note
 
-from ..models.note_type import get_or_create_note_type, FIELDS
+from ..models.note_type import get_or_create_note_type
 from ..services.jmdict import lookup_word, search_words, get_word_details
 from ..services.openai_client import generate_sentence, translate_sentence
 from ..services.audio import generate_word_audio, generate_sentence_audio, get_media_folder
