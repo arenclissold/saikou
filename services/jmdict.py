@@ -58,6 +58,62 @@ def lookup_word(word: str) -> Optional[str]:
         return None
 
 
+def get_word_details(word: str) -> Optional[Dict]:
+    """
+    Get full word details from Jisho API.
+
+    Args:
+        word: The Japanese word to look up
+
+    Returns:
+        Dictionary with word details or None if not found
+    """
+    try:
+        encoded_word = urllib.request.quote(word)
+        url = f"{JISHO_API_URL}?keyword={encoded_word}"
+
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Saikou-Anki-Addon/1.0"}
+        )
+
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode("utf-8"))
+
+        if not data.get("data"):
+            return None
+
+        # Find the best match (exact match preferred)
+        best_entry = None
+        for entry in data["data"]:
+            japanese = entry.get("japanese", [])
+            for jp in japanese:
+                if jp.get("word") == word or jp.get("reading") == word:
+                    best_entry = entry
+                    break
+            if best_entry:
+                break
+
+        # If no exact match, use the first result
+        if not best_entry:
+            best_entry = data["data"][0]
+
+        # Extract word details
+        japanese = best_entry.get("japanese", [{}])[0]
+        word_text = japanese.get("word") or japanese.get("reading", "")
+        reading = japanese.get("reading", "")
+
+        return {
+            "word": word_text,
+            "reading": reading,
+            "definition": format_jisho_entry(best_entry),
+            "full_entry": best_entry
+        }
+
+    except Exception:
+        return None
+
+
 def format_jisho_entry(entry: dict) -> str:
     """
     Format a Jisho API entry into a readable definition string.

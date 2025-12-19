@@ -5,6 +5,7 @@ import re
 
 from aqt.qt import (
     QDialog,
+    QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QFormLayout,
@@ -16,6 +17,10 @@ from aqt.qt import (
     QProgressDialog,
     QTimer,
     QThread,
+    QListWidget,
+    QListWidgetItem,
+    QSplitter,
+    QFrame,
     pyqtSignal,
     Qt,
 )
@@ -24,7 +29,7 @@ from aqt.sound import av_player
 from anki.notes import Note
 
 from ..models.note_type import get_or_create_note_type, FIELDS
-from ..services.jmdict import lookup_word
+from ..services.jmdict import lookup_word, search_words, get_word_details
 from ..services.openai_client import generate_sentence, translate_sentence
 from ..services.audio import generate_word_audio, generate_sentence_audio, get_media_folder
 
@@ -47,14 +52,50 @@ class LookupWorker(QThread):
             self.finished.emit("")
 
 
+class SearchWorker(QThread):
+    """Worker thread for async dictionary search."""
+
+    finished = pyqtSignal(list)  # list of search results
+
+    def __init__(self, query: str):
+        super().__init__()
+        self.query = query
+
+    def run(self):
+        """Perform the search in background thread."""
+        try:
+            results = search_words(self.query, limit=20)
+            self.finished.emit(results)
+        except Exception:
+            self.finished.emit([])
+
+
+class WordDetailsWorker(QThread):
+    """Worker thread for async word details lookup."""
+
+    finished = pyqtSignal(dict)  # word details dict
+
+    def __init__(self, word: str):
+        super().__init__()
+        self.word = word
+
+    def run(self):
+        """Get word details in background thread."""
+        try:
+            details = get_word_details(self.word)
+            self.finished.emit(details or {})
+        except Exception:
+            self.finished.emit({})
+
+
 class CardCreatorDialog(QDialog):
     """Dialog for creating Japanese vocabulary cards with AI assistance."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Saikou - Create Japanese Card")
-        self.setMinimumWidth(500)
-        self.setMinimumHeight(400)
+        self.setMinimumWidth(1000)
+        self.setMinimumHeight(700)
 
         # Debounce timer for word lookup
         self._lookup_timer = QTimer()
@@ -62,101 +103,212 @@ class CardCreatorDialog(QDialog):
         self._lookup_timer.setInterval(300)  # 300ms debounce
         self._lookup_timer.timeout.connect(self._do_lookup)
 
-        # Current lookup worker
+        # Debounce timer for dictionary search
+        self._search_timer = QTimer()
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(500)  # 500ms debounce
+        self._search_timer.timeout.connect(self._do_search)
+
+        # Current workers
         self._lookup_worker = None
+        self._search_worker = None
+        self._details_worker = None
 
         self._setup_ui()
 
     def _setup_ui(self):
         """Set up the dialog UI using standard widgets."""
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+
+        # Create splitter for left/right panels
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
+
+        # Left panel - Dictionary search
+        left_panel = self._create_dictionary_panel()
+        splitter.addWidget(left_panel)
+
+        # Right panel - Card creator
+        right_panel = self._create_card_creator_panel()
+        splitter.addWidget(right_panel)
+
+        # Set splitter proportions (40% left, 60% right)
+        splitter.setSizes([400, 600])
+
+        main_layout.addWidget(splitter)
+
+    def _create_dictionary_panel(self):
+        """Create the left dictionary search panel."""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Title
+        title_label = QLabel("Dictionary Search")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        layout.addWidget(title_label)
+
+        # Search input
+        search_layout = QHBoxLayout()
+        search_layout.setSpacing(5)
+        self.dict_search_input = QLineEdit()
+        self.dict_search_input.setPlaceholderText("Search dictionary...")
+        self.dict_search_input.textChanged.connect(self._on_search_changed)
+        self.dict_search_input.returnPressed.connect(self._trigger_search)
+        self.dict_search_input.setMinimumHeight(32)
+        search_layout.addWidget(self.dict_search_input)
+
+        clear_btn = QPushButton("✕")
+        clear_btn.setFixedWidth(32)
+        clear_btn.setFixedHeight(32)
+        clear_btn.setToolTip("Clear search")
+        clear_btn.clicked.connect(self.dict_search_input.clear)
+        search_layout.addWidget(clear_btn)
+
+        layout.addLayout(search_layout)
+
+        # Search results list
+        results_label = QLabel("Results")
+        results_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(results_label)
+
+        self.search_results_list = QListWidget()
+        self.search_results_list.itemClicked.connect(self._on_result_selected)
+        layout.addWidget(self.search_results_list)
+
+        # Word details display
+        details_label = QLabel("Word Details")
+        details_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(details_label)
+
+        self.word_details_display = QTextEdit()
+        self.word_details_display.setReadOnly(True)
+        self.word_details_display.setMaximumHeight(200)
+        layout.addWidget(self.word_details_display)
+
+        # Use word button
+        use_word_btn = QPushButton("Use This Word")
+        use_word_btn.clicked.connect(self._use_selected_word)
+        layout.addWidget(use_word_btn)
+
+        return panel
+
+    def _create_card_creator_panel(self):
+        """Create the right card creator panel."""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Title
+        title_label = QLabel("Card Creator")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        layout.addWidget(title_label)
 
         # Form layout for fields
         form_layout = QFormLayout()
+        form_layout.setSpacing(12)
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
 
         # Target Word (required)
         word_layout = QHBoxLayout()
+        word_layout.setSpacing(5)
         self.word_input = QLineEdit()
         self.word_input.setPlaceholderText("The word you want to learn")
         self.word_input.textChanged.connect(self._on_word_changed)
+        self.word_input.setMinimumHeight(32)
         word_layout.addWidget(self.word_input)
-        form_layout.addRow("Target Word *:", word_layout)
+        self.generate_all_btn = QPushButton("Generate All")
+        self.generate_all_btn.setFixedWidth(100)
+        self.generate_all_btn.clicked.connect(self._generate_all)
+        word_layout.addWidget(self.generate_all_btn)
+        form_layout.addRow("Target Word", word_layout)
 
         # Sentence
         sentence_layout = QHBoxLayout()
+        sentence_layout.setSpacing(5)
         self.sentence_input = QTextEdit()
         self.sentence_input.setPlaceholderText("Example sentence (will be generated if empty)")
         self.sentence_input.setMaximumHeight(60)
         sentence_layout.addWidget(self.sentence_input)
         self.generate_sentence_btn = QPushButton("Generate")
+        self.generate_sentence_btn.setFixedWidth(80)
         self.generate_sentence_btn.clicked.connect(self._generate_sentence)
         sentence_layout.addWidget(self.generate_sentence_btn)
-        form_layout.addRow("Sentence:", sentence_layout)
+        form_layout.addRow("Sentence", sentence_layout)
 
         # Sentence Translation
         translation_layout = QHBoxLayout()
+        translation_layout.setSpacing(5)
         self.translation_input = QTextEdit()
         self.translation_input.setPlaceholderText("English translation (will be generated if empty)")
         self.translation_input.setMaximumHeight(60)
         translation_layout.addWidget(self.translation_input)
         self.generate_translation_btn = QPushButton("Generate")
+        self.generate_translation_btn.setFixedWidth(80)
         self.generate_translation_btn.clicked.connect(self._generate_translation)
         translation_layout.addWidget(self.generate_translation_btn)
-        form_layout.addRow("Translation:", translation_layout)
+        form_layout.addRow("Translation", translation_layout)
 
         # Definition
         definition_layout = QHBoxLayout()
+        definition_layout.setSpacing(5)
         self.definition_input = QTextEdit()
         self.definition_input.setPlaceholderText("Definition (auto-looked up from Jisho)")
-        self.definition_input.setMaximumHeight(80)
+        self.definition_input.setMaximumHeight(100)
         definition_layout.addWidget(self.definition_input)
         self.lookup_definition_btn = QPushButton("Lookup")
+        self.lookup_definition_btn.setFixedWidth(80)
         self.lookup_definition_btn.clicked.connect(self._lookup_definition)
         definition_layout.addWidget(self.lookup_definition_btn)
-        form_layout.addRow("Definition:", definition_layout)
-
-        # Audio status labels
-        self.sentence_audio_label = QLabel("Not generated")
-        self.word_audio_label = QLabel("Not generated")
+        form_layout.addRow("Definition", definition_layout)
 
         # Sentence Audio
         sentence_audio_layout = QHBoxLayout()
-        sentence_audio_layout.addWidget(self.sentence_audio_label)
+        sentence_audio_layout.setSpacing(5)
         self.play_sentence_audio_btn = QPushButton("▶")
-        self.play_sentence_audio_btn.setFixedWidth(30)
+        self.play_sentence_audio_btn.setFixedWidth(32)
+        self.play_sentence_audio_btn.setFixedHeight(32)
+        self.play_sentence_audio_btn.setToolTip("Play audio")
         self.play_sentence_audio_btn.clicked.connect(self._play_sentence_audio)
         self.play_sentence_audio_btn.setEnabled(False)
         sentence_audio_layout.addWidget(self.play_sentence_audio_btn)
         self.generate_sentence_audio_btn = QPushButton("Generate")
+        self.generate_sentence_audio_btn.setFixedWidth(80)
         self.generate_sentence_audio_btn.clicked.connect(self._generate_sentence_audio)
         sentence_audio_layout.addWidget(self.generate_sentence_audio_btn)
-        form_layout.addRow("Sentence Audio:", sentence_audio_layout)
+        form_layout.addRow("Sentence Audio", sentence_audio_layout)
 
         # Word Audio
         word_audio_layout = QHBoxLayout()
-        word_audio_layout.addWidget(self.word_audio_label)
+        word_audio_layout.setSpacing(5)
         self.play_word_audio_btn = QPushButton("▶")
-        self.play_word_audio_btn.setFixedWidth(30)
+        self.play_word_audio_btn.setFixedWidth(32)
+        self.play_word_audio_btn.setFixedHeight(32)
+        self.play_word_audio_btn.setToolTip("Play audio")
         self.play_word_audio_btn.clicked.connect(self._play_word_audio)
         self.play_word_audio_btn.setEnabled(False)
         word_audio_layout.addWidget(self.play_word_audio_btn)
         self.generate_word_audio_btn = QPushButton("Generate")
+        self.generate_word_audio_btn.setFixedWidth(80)
         self.generate_word_audio_btn.clicked.connect(self._generate_word_audio)
         word_audio_layout.addWidget(self.generate_word_audio_btn)
-        form_layout.addRow("Word Audio:", word_audio_layout)
+        form_layout.addRow("Word Audio", word_audio_layout)
 
         layout.addLayout(form_layout)
+        layout.addStretch()
 
         # Store generated audio tags
         self.sentence_audio_tag = ""
         self.word_audio_tag = ""
+        self._selected_word = None
 
         # Buttons
         button_layout = QHBoxLayout()
-
-        self.generate_all_btn = QPushButton("Generate All")
-        self.generate_all_btn.clicked.connect(self._generate_all)
-        button_layout.addWidget(self.generate_all_btn)
+        button_layout.setSpacing(10)
 
         button_layout.addStretch()
 
@@ -169,6 +321,129 @@ class CardCreatorDialog(QDialog):
         button_layout.addWidget(self.cancel_btn)
 
         layout.addLayout(button_layout)
+
+        return panel
+
+    def _on_search_changed(self, text: str):
+        """Handle dictionary search input changes - debounced."""
+        self._search_timer.stop()
+
+        if text.strip():
+            self._search_timer.start()
+        else:
+            self.search_results_list.clear()
+            self.word_details_display.clear()
+
+    def _trigger_search(self):
+        """Trigger search immediately when Enter is pressed."""
+        self._search_timer.stop()
+        self._do_search()
+
+    def _do_search(self):
+        """Perform the dictionary search (called after debounce)."""
+        query = self.dict_search_input.text().strip()
+        if not query:
+            return
+
+        # Cancel any running search worker
+        if self._search_worker and self._search_worker.isRunning():
+            self._search_worker.terminate()
+            self._search_worker.wait()
+
+        # Clear previous results
+        self.search_results_list.clear()
+        self.search_results_list.addItem("Searching...")
+
+        # Start new search worker
+        self._search_worker = SearchWorker(query)
+        self._search_worker.finished.connect(self._on_search_finished)
+        self._search_worker.start()
+
+    def _on_search_finished(self, results: list):
+        """Handle search results from worker thread."""
+        self.search_results_list.clear()
+
+        if not results:
+            self.search_results_list.addItem("No results found")
+            return
+
+        for result in results:
+            word_text = result.get("word", "")
+            reading = result.get("reading", "")
+            definition = result.get("definition", "")
+
+            # Create display text
+            if reading and reading != word_text:
+                display_text = f"{word_text} ({reading})"
+            else:
+                display_text = word_text
+
+            # Show first line of definition
+            if definition:
+                first_line = definition.split("\n")[0]
+                if len(first_line) > 50:
+                    first_line = first_line[:50] + "..."
+                display_text += f" - {first_line}"
+
+            item = QListWidgetItem(display_text)
+            item.setData(Qt.ItemDataRole.UserRole, result)
+            self.search_results_list.addItem(item)
+
+    def _on_result_selected(self, item: QListWidgetItem):
+        """Handle selection of a search result."""
+        result = item.data(Qt.ItemDataRole.UserRole)
+        if not result:
+            return
+
+        word_text = result.get("word", "")
+        self._selected_word = word_text
+
+        # Cancel any running details worker
+        if self._details_worker and self._details_worker.isRunning():
+            self._details_worker.terminate()
+            self._details_worker.wait()
+
+        # Show loading
+        self.word_details_display.setPlainText("Loading details...")
+
+        # Get full word details
+        self._details_worker = WordDetailsWorker(word_text)
+        self._details_worker.finished.connect(self._on_details_finished)
+        self._details_worker.start()
+
+    def _on_details_finished(self, details: dict):
+        """Handle word details from worker thread."""
+        if not details:
+            self.word_details_display.setPlainText("No details available")
+            return
+
+        word_text = details.get("word", "")
+        reading = details.get("reading", "")
+        definition = details.get("definition", "")
+
+        # Format display
+        display_text = f"Word: {word_text}\n"
+        if reading and reading != word_text:
+            display_text += f"Reading: {reading}\n"
+        display_text += f"\nDefinition:\n{definition}"
+
+        self.word_details_display.setPlainText(display_text)
+
+    def _use_selected_word(self):
+        """Use the selected word to populate card creator fields."""
+        if not self._selected_word:
+            QMessageBox.warning(self, "Warning", "Please select a word from the search results first.")
+            return
+
+        # Get word details
+        details = get_word_details(self._selected_word)
+        if not details:
+            QMessageBox.warning(self, "Warning", "Could not load word details.")
+            return
+
+        # Populate fields
+        self.word_input.setText(details.get("word", ""))
+        self.definition_input.setPlainText(details.get("definition", ""))
 
     def _get_audio_path(self, sound_tag: str) -> str:
         """Extract the full file path from a sound tag."""
@@ -289,7 +564,6 @@ class CardCreatorDialog(QDialog):
 
         try:
             self.sentence_audio_tag = generate_sentence_audio(sentence)
-            self.sentence_audio_label.setText("Generated ✓")
             self.play_sentence_audio_btn.setEnabled(True)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to generate audio:\n{str(e)}")
@@ -309,7 +583,6 @@ class CardCreatorDialog(QDialog):
 
         try:
             self.word_audio_tag = generate_word_audio(word)
-            self.word_audio_label.setText("Generated ✓")
             self.play_word_audio_btn.setEnabled(True)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to generate audio:\n{str(e)}")
@@ -350,14 +623,12 @@ class CardCreatorDialog(QDialog):
             # 4. Generate word audio if not generated
             if not self.word_audio_tag:
                 self.word_audio_tag = generate_word_audio(word)
-                self.word_audio_label.setText("Generated ✓")
                 self.play_word_audio_btn.setEnabled(True)
 
             # 5. Generate sentence audio if not generated
             sentence = self.sentence_input.toPlainText().strip()
             if sentence and not self.sentence_audio_tag:
                 self.sentence_audio_tag = generate_sentence_audio(sentence)
-                self.sentence_audio_label.setText("Generated ✓")
                 self.play_sentence_audio_btn.setEnabled(True)
 
         except Exception as e:
@@ -410,15 +681,21 @@ class CardCreatorDialog(QDialog):
         self.definition_input.clear()
         self.sentence_audio_tag = ""
         self.word_audio_tag = ""
-        self.sentence_audio_label.setText("Not generated")
-        self.word_audio_label.setText("Not generated")
         self.play_sentence_audio_btn.setEnabled(False)
         self.play_word_audio_btn.setEnabled(False)
+        self._selected_word = None
 
     def closeEvent(self, event):
         """Clean up on close."""
         self._lookup_timer.stop()
+        self._search_timer.stop()
         if self._lookup_worker and self._lookup_worker.isRunning():
             self._lookup_worker.terminate()
             self._lookup_worker.wait()
+        if self._search_worker and self._search_worker.isRunning():
+            self._search_worker.terminate()
+            self._search_worker.wait()
+        if self._details_worker and self._details_worker.isRunning():
+            self._details_worker.terminate()
+            self._details_worker.wait()
         super().closeEvent(event)
