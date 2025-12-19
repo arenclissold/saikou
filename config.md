@@ -34,3 +34,14 @@ Default: `Japanese`
 
 Your native language for translations.
 Default: `English`
+
+### field_mapping
+
+Maps Saikou fields to fields in your chosen note type. Configure this through:
+**Tools → Saikou → Map Fields...**
+
+This allows you to:
+
+- Select which deck cards will be added to
+- Select which note type to use
+- Map each Saikou field (Target Word, Sentence, Translation, Definition, Sentence Audio, Word Audio) to a field in your note type

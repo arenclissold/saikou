@@ -27,10 +27,25 @@ from aqt import mw
 from aqt.sound import av_player
 from anki.notes import Note
 
-from ..models.note_type import get_or_create_note_type
 from ..services.jmdict import lookup_word, search_words, get_word_details
 from ..services.openai_client import generate_sentence, translate_sentence
 from ..services.audio import generate_word_audio, generate_sentence_audio, get_media_folder
+
+
+def get_addon_name() -> str:
+    """Get the add-on folder name."""
+    return __name__.split(".")[0]
+
+
+def get_config() -> dict:
+    """Get the current configuration."""
+    return mw.addonManager.getConfig(get_addon_name()) or {}
+
+
+def get_field_mapping() -> dict:
+    """Get the field mapping configuration."""
+    config = get_config()
+    return config.get("field_mapping", {})
 
 
 class LookupWorker(QThread):
@@ -642,26 +657,56 @@ class CardCreatorDialog(QDialog):
             QMessageBox.warning(self, "Warning", "Target word is required.")
             return
 
-        # Get or create the note type
-        try:
-            model = get_or_create_note_type()
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to create note type:\n{str(e)}")
+        # Get field mapping configuration
+        field_mapping = get_field_mapping()
+        if not field_mapping.get("notetype_id"):
+            QMessageBox.warning(
+                self,
+                "Warning",
+                "Please configure field mappings first.\n"
+                "Go to Tools → Saikou → Map Fields..."
+            )
+            return
+
+        # Get the note type
+        notetype_id = field_mapping.get("notetype_id")
+        model = mw.col.models.get(notetype_id)
+        if not model:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Note type not found. Please reconfigure field mappings."
+            )
             return
 
         # Create the note
         note = Note(mw.col, model)
 
-        # Set field values
-        note["TargetWord"] = word
-        note["Sentence"] = self.sentence_input.toPlainText().strip()
-        note["SentenceTranslation"] = self.translation_input.toPlainText().strip()
-        note["Definition"] = self.definition_input.toPlainText().strip()
-        note["SentenceAudio"] = self.sentence_audio_tag
-        note["WordAudio"] = self.word_audio_tag
+        # Get field mappings
+        mappings = field_mapping.get("mappings", {})
 
-        # Get the current deck
-        deck_id = mw.col.decks.current()["id"]
+        # Map Saikou fields to note fields
+        field_values = {
+            "target_word": word,
+            "sentence": self.sentence_input.toPlainText().strip(),
+            "sentence_translation": self.translation_input.toPlainText().strip(),
+            "definition": self.definition_input.toPlainText().strip(),
+            "sentence_audio": self.sentence_audio_tag,
+            "word_audio": self.word_audio_tag,
+        }
+
+        # Set field values based on mappings
+        for saikou_field, note_field in mappings.items():
+            if note_field and saikou_field in field_values:
+                try:
+                    note[note_field] = field_values[saikou_field]
+                except KeyError:
+                    pass  # Field doesn't exist in note type
+
+        # Get the deck
+        deck_id = field_mapping.get("deck_id")
+        if not deck_id:
+            deck_id = mw.col.decks.current()["id"]
 
         # Add the note
         try:

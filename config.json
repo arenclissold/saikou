@@ -4,5 +4,12 @@
 	"tts_voice": "alloy",
 	"tts_model": "tts-1",
 	"target_language": "Japanese",
-	"native_language": "English"
+	"native_language": "English",
+	"field_mapping": {
+		"deck_id": null,
+		"deck_name": "",
+		"notetype_id": null,
+		"notetype_name": "",
+		"mappings": {}
+	}
 }
