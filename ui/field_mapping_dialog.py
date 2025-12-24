@@ -1,5 +1,8 @@
 # Field mapping dialog for Saikou
 
+import os
+from pathlib import Path
+
 from aqt.qt import (
     QDialog,
     QVBoxLayout,
@@ -49,6 +52,39 @@ def save_config(config: dict):
     mw.addonManager.writeConfig(get_addon_name(), config)
 
 
+def _get_template_path(filename: str) -> str:
+    """Get the path to a template file as a string."""
+    # Get addon path - try addonManager first, then fallback to relative path
+    try:
+        addon_name = get_addon_name()
+        # Try to get addons folder - it might be a property or method
+        addons_folder = mw.addonManager.addonsFolder
+        if callable(addons_folder):
+            addons_folder = addons_folder()
+        addon_path = Path(str(addons_folder)) / addon_name
+        template_path = addon_path / "templates" / filename
+        if template_path.exists():
+            return str(template_path)
+    except (AttributeError, KeyError, TypeError):
+        pass
+
+    # Fallback to relative path from this file (for development/testing)
+    addon_path = Path(__file__).parent.parent
+    template_path = addon_path / "templates" / filename
+    return str(template_path)
+
+
+def _read_template_file(filename: str) -> str:
+    """Read a template file and return its contents."""
+    template_path = _get_template_path(filename)
+    try:
+        with open(template_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        # Fallback to empty string if file doesn't exist
+        return ""
+
+
 class FieldMappingDialog(QDialog):
     """Dialog for mapping Saikou fields to note type fields."""
 
@@ -71,6 +107,12 @@ class FieldMappingDialog(QDialog):
             "to a field in your note type. Leave empty to skip a field."
         )
         layout.addWidget(info_label)
+
+        # Create default setup button (smaller, secondary style)
+        create_default_btn = QPushButton("Create Default Saikou Setup")
+        create_default_btn.clicked.connect(self._create_default_setup)
+        create_default_btn.setMaximumWidth(200)
+        layout.addWidget(create_default_btn)
 
         # Form layout
         form_layout = QFormLayout()
@@ -249,5 +291,157 @@ class FieldMappingDialog(QDialog):
         }
 
         save_config(config)
-        QMessageBox.information(self, "Success", "Field mappings saved!")
         self.accept()
+
+    def _create_default_setup(self):
+        """Create default Saikou deck, note type, and card templates."""
+        reply = QMessageBox.question(
+            self,
+            "Create Default Setup",
+            "This will create:\n"
+            "- A deck named 'Saikou'\n"
+            "- A note type named 'Saikou Japanese' with all required fields\n"
+            "- Card templates\n"
+            "- Auto-configured field mappings\n\n"
+            "Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            # 1. Create deck
+            deck_id = self._create_default_deck()
+            if not deck_id:
+                QMessageBox.critical(self, "Error", "Failed to create deck.")
+                return
+
+            # 2. Create note type
+            notetype_id = self._create_default_notetype()
+            if not notetype_id:
+                QMessageBox.critical(self, "Error", "Failed to create note type.")
+                return
+
+            # 3. Auto-map fields
+            self._auto_map_default_fields(deck_id, notetype_id)
+
+            # 4. Refresh UI and reload mappings
+            self._populate_decks()
+            self._populate_notetypes()
+            self.deck_combo.setCurrentIndex(self.deck_combo.findData(deck_id))
+            self.notetype_combo.setCurrentIndex(self.notetype_combo.findData(notetype_id))
+            self._update_field_combos(auto_map=False)
+            # Reload config to populate field mappings
+            self._load_config()
+
+            QMessageBox.information(
+                self,
+                "Success",
+                "Default Saikou setup created successfully!\n\n"
+                "Deck: Saikou\n"
+                "Note Type: Saikou Japanese\n"
+                "All fields have been auto-mapped."
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to create default setup:\n{str(e)}")
+
+    def _create_default_deck(self):
+        """Create the default Saikou deck."""
+        deck_name = "Saikou"
+
+        # Check if deck already exists
+        decks = mw.col.decks.all_names_and_ids()
+        for deck in decks:
+            if deck.name == deck_name:
+                return deck.id
+
+        # Create new deck
+        deck_id = mw.col.decks.id(deck_name)
+        mw.col.decks.save(mw.col.decks.get(deck_id))
+        mw.col.decks.flush()
+
+        return deck_id
+
+    def _create_default_notetype(self):
+        """Create the default Saikou note type with fields and templates."""
+        notetype_name = "Saikou Japanese"
+
+        # Check if note type already exists
+        models = mw.col.models.all_names_and_ids()
+        for model in models:
+            if model.name == notetype_name:
+                return model.id
+
+        # Create new model
+        mm = mw.col.models
+        model = mm.new(notetype_name)
+
+        # Add fields
+        field_names = [
+            "Target Word",
+            "Sentence",
+            "Sentence Translation",
+            "Definition",
+            "Sentence Audio",
+            "Word Audio",
+        ]
+
+        for field_name in field_names:
+            field = mm.new_field(field_name)
+            mm.add_field(model, field)
+
+        # Create card template
+        template = mm.new_template("Card 1")
+
+        # Load templates from files
+        front_template = _read_template_file("card_front.html")
+        back_template = _read_template_file("card_back.html")
+        css_styling = _read_template_file("card.css")
+
+        # Set templates
+        template["qfmt"] = front_template
+        template["afmt"] = back_template
+
+        mm.add_template(model, template)
+
+        # Add CSS styling
+        model["css"] = css_styling
+
+        # Save model
+        mm.save(model)
+        mw.col.models.flush()
+
+        return model["id"]
+
+    def _auto_map_default_fields(self, deck_id, notetype_id):
+        """Auto-map all fields for the default setup."""
+        model = mw.col.models.get(notetype_id)
+        if not model:
+            return
+
+        # Build mappings - all fields map to themselves
+        mappings = {
+            "target_word": "Target Word",
+            "sentence": "Sentence",
+            "sentence_translation": "Sentence Translation",
+            "definition": "Definition",
+            "sentence_audio": "Sentence Audio",
+            "word_audio": "Word Audio",
+        }
+
+        # Get deck name
+        deck = mw.col.decks.get(deck_id)
+        deck_name = deck["name"] if deck else "Saikou"
+
+        # Save configuration
+        config = get_config()
+        config["field_mapping"] = {
+            "deck_id": deck_id,
+            "deck_name": deck_name,
+            "notetype_id": notetype_id,
+            "notetype_name": model["name"],
+            "mappings": mappings,
+        }
+        save_config(config)

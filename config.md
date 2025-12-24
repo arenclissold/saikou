@@ -25,16 +25,6 @@ The TTS model to use for audio generation.
 Default: `tts-1`
 Options: `tts-1`, `tts-1-hd`
 
-### target_language
-
-The language you are learning.
-Default: `Japanese`
-
-### native_language
-
-Your native language for translations.
-Default: `English`
-
 ### field_mapping
 
 Maps Saikou fields to fields in your chosen note type. Configure this through:

@@ -36,29 +36,6 @@ TTS_MODELS = [
     "tts-1-hd",
 ]
 
-LANGUAGES = [
-    "Japanese",
-    "Chinese",
-    "Korean",
-    "Spanish",
-    "French",
-    "German",
-    "Italian",
-    "Portuguese",
-    "Russian",
-]
-
-NATIVE_LANGUAGES = [
-    "English",
-    "Spanish",
-    "French",
-    "German",
-    "Chinese",
-    "Japanese",
-    "Korean",
-    "Portuguese",
-    "Russian",
-]
 
 
 def get_addon_name() -> str:
@@ -121,18 +98,6 @@ class ConfigDialog(QDialog):
         self.tts_model_combo.addItems(TTS_MODELS)
         form_layout.addRow("TTS Model:", self.tts_model_combo)
 
-        # Target Language
-        self.target_lang_combo = QComboBox()
-        self.target_lang_combo.addItems(LANGUAGES)
-        self.target_lang_combo.setEditable(True)
-        form_layout.addRow("Target Language:", self.target_lang_combo)
-
-        # Native Language
-        self.native_lang_combo = QComboBox()
-        self.native_lang_combo.addItems(NATIVE_LANGUAGES)
-        self.native_lang_combo.setEditable(True)
-        form_layout.addRow("Native Language:", self.native_lang_combo)
-
         layout.addLayout(form_layout)
 
         # Help text
@@ -191,22 +156,6 @@ class ConfigDialog(QDialog):
         if index >= 0:
             self.tts_model_combo.setCurrentIndex(index)
 
-        # Target Language
-        target_lang = config.get("target_language", "Japanese")
-        index = self.target_lang_combo.findText(target_lang)
-        if index >= 0:
-            self.target_lang_combo.setCurrentIndex(index)
-        else:
-            self.target_lang_combo.setEditText(target_lang)
-
-        # Native Language
-        native_lang = config.get("native_language", "English")
-        index = self.native_lang_combo.findText(native_lang)
-        if index >= 0:
-            self.native_lang_combo.setCurrentIndex(index)
-        else:
-            self.native_lang_combo.setEditText(native_lang)
-
     def _save_and_close(self):
         """Save configuration and close dialog."""
         config = {
@@ -214,10 +163,7 @@ class ConfigDialog(QDialog):
             "openai_model": self.model_combo.currentText(),
             "tts_voice": self.voice_combo.currentText(),
             "tts_model": self.tts_model_combo.currentText(),
-            "target_language": self.target_lang_combo.currentText(),
-            "native_language": self.native_lang_combo.currentText(),
         }
 
         save_config(config)
-        QMessageBox.information(self, "Success", "Configuration saved!")
         self.accept()

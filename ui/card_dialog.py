@@ -237,6 +237,14 @@ class CardCreatorDialog(QDialog):
         # Update deck display
         self._update_deck_display()
 
+        # API key warning
+        self.api_key_warning_label = QLabel()
+        self.api_key_warning_label.setWordWrap(True)
+        self.api_key_warning_label.setStyleSheet("color: #d32f2f; padding: 8px; background-color: #ffebee; border-radius: 4px;")
+        self.api_key_warning_label.setVisible(False)
+        layout.addWidget(self.api_key_warning_label)
+        self._check_api_key()
+
         # Form layout for fields
         form_layout = QFormLayout()
         form_layout.setSpacing(12)
@@ -343,6 +351,7 @@ class CardCreatorDialog(QDialog):
 
         self.save_btn = QPushButton("Save Card")
         self.save_btn.clicked.connect(self._save_card)
+        self._update_save_button_state()
         button_layout.addWidget(self.save_btn)
 
         self.cancel_btn = QPushButton("Cancel")
@@ -364,6 +373,61 @@ class CardCreatorDialog(QDialog):
         else:
             self.deck_display_label.setText("(Not configured)")
             self.deck_display_label.setStyleSheet("color: #888;")
+
+        # Also update save button state when deck display updates
+        self._update_save_button_state()
+
+    def _check_api_key(self):
+        """Check if API key is configured and show warning if not."""
+        config = get_config()
+        api_key = config.get("openai_api_key", "").strip()
+
+        if not api_key:
+            warning_text = (
+                '⚠️ OpenAI API key not configured. '
+                '<a href="config">Configure API key</a> to generate sentences, translations, and audio.'
+            )
+            self.api_key_warning_label.setText(warning_text)
+            self.api_key_warning_label.setOpenExternalLinks(False)
+            # Disconnect first to avoid multiple connections
+            try:
+                self.api_key_warning_label.linkActivated.disconnect()
+            except TypeError:
+                pass  # No existing connection
+            self.api_key_warning_label.linkActivated.connect(self._open_config)
+            self.api_key_warning_label.setVisible(True)
+        else:
+            self.api_key_warning_label.setVisible(False)
+
+    def _open_config(self, link: str):
+        """Open the configuration dialog."""
+        from .config_dialog import ConfigDialog
+        config_dialog = ConfigDialog(self)
+        result = config_dialog.exec()
+        # Recheck API key after config dialog closes
+        if result == QDialog.DialogCode.Accepted:
+            self._check_api_key()
+        # Ensure focus returns to the card dialog
+        self.activateWindow()
+        self.raise_()
+
+    def _update_save_button_state(self):
+        """Enable/disable save button based on field mapping configuration."""
+        # Check if save_btn exists (might not be created yet during initialization)
+        if not hasattr(self, 'save_btn') or self.save_btn is None:
+            return
+
+        field_mapping = get_field_mapping()
+        mappings = field_mapping.get("mappings", {})
+
+        # Check if at least target_word is mapped
+        has_target_word = bool(mappings.get("target_word"))
+
+        self.save_btn.setEnabled(has_target_word)
+        if not has_target_word:
+            self.save_btn.setToolTip("Please configure field mappings first (Tools → Saikou → Map Fields...)")
+        else:
+            self.save_btn.setToolTip("")
 
     def _on_search_changed(self, text: str):
         """Handle dictionary search input changes - debounced."""

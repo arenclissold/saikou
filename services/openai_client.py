@@ -74,23 +74,20 @@ def generate_sentence(word: str, definition: Optional[str] = None) -> str:
     Returns:
         A Japanese sentence containing the word
     """
-    config = get_config()
-    target_lang = config.get("target_language", "Japanese")
-
     context = f" (meaning: {definition})" if definition else ""
 
-    prompt = f"""Generate a natural, everyday {target_lang} sentence using the word "{word}"{context}.
+    prompt = f"""Generate a natural, everyday Japanese sentence using the word "{word}"{context}.
 
 Requirements:
 - The sentence should be appropriate for language learners
 - Use natural, conversational Japanese
 - Keep the sentence relatively simple but meaningful
-- Only output the {target_lang} sentence, nothing else"""
+- Only output the Japanese sentence, nothing else"""
 
     payload = {
         "model": get_model(),
         "messages": [
-            {"role": "system", "content": f"You are a {target_lang} language teacher helping students learn vocabulary through example sentences."},
+            {"role": "system", "content": "You are a Japanese language teacher helping students learn vocabulary through example sentences."},
             {"role": "user", "content": prompt}
         ],
         "temperature": 0.7,
@@ -111,11 +108,7 @@ def translate_sentence(sentence: str) -> str:
     Returns:
         The English translation
     """
-    config = get_config()
-    target_lang = config.get("target_language", "Japanese")
-    native_lang = config.get("native_language", "English")
-
-    prompt = f"""Translate the following {target_lang} sentence to {native_lang}:
+    prompt = f"""Translate the following Japanese sentence to English:
 
 {sentence}
 
@@ -124,7 +117,7 @@ Provide only the translation, nothing else."""
     payload = {
         "model": get_model(),
         "messages": [
-            {"role": "system", "content": f"You are a professional {target_lang}-{native_lang} translator. Provide accurate, natural translations."},
+            {"role": "system", "content": "You are a professional Japanese-English translator. Provide accurate, natural translations."},
             {"role": "user", "content": prompt}
         ],
         "temperature": 0.3,
@@ -146,27 +139,23 @@ def generate_and_translate(word: str, definition: Optional[str] = None) -> Tuple
     Returns:
         Tuple of (Japanese sentence, English translation)
     """
-    config = get_config()
-    target_lang = config.get("target_language", "Japanese")
-    native_lang = config.get("native_language", "English")
-
     context = f" (meaning: {definition})" if definition else ""
 
-    prompt = f"""Generate a natural {target_lang} sentence using the word "{word}"{context}, then translate it to {native_lang}.
+    prompt = f"""Generate a natural Japanese sentence using the word "{word}"{context}, then translate it to English.
 
 Requirements:
 - The sentence should be appropriate for language learners
-- Use natural, conversational {target_lang}
+- Use natural, conversational Japanese
 - Keep the sentence relatively simple but meaningful
 
 Output format (exactly two lines):
-{target_lang}: [sentence]
-{native_lang}: [translation]"""
+Japanese: [sentence]
+English: [translation]"""
 
     payload = {
         "model": get_model(),
         "messages": [
-            {"role": "system", "content": f"You are a {target_lang} language teacher. Generate example sentences and translations."},
+            {"role": "system", "content": "You are a Japanese language teacher. Generate example sentences and translations."},
             {"role": "user", "content": prompt}
         ],
         "temperature": 0.7,
@@ -183,15 +172,15 @@ Output format (exactly two lines):
 
     for line in lines:
         line = line.strip()
-        if line.lower().startswith(target_lang.lower() + ":"):
+        if line.lower().startswith("japanese:"):
             sentence = line.split(":", 1)[1].strip()
-        elif line.lower().startswith(native_lang.lower() + ":"):
+        elif line.lower().startswith("english:"):
             translation = line.split(":", 1)[1].strip()
 
     # Fallback if parsing fails
     if not sentence and len(lines) >= 1:
-        sentence = lines[0].replace(f"{target_lang}:", "").strip()
+        sentence = lines[0].replace("Japanese:", "").strip()
     if not translation and len(lines) >= 2:
-        translation = lines[1].replace(f"{native_lang}:", "").strip()
+        translation = lines[1].replace("English:", "").strip()
 
     return sentence, translation
