@@ -28,7 +28,7 @@ from aqt.sound import av_player
 from anki.notes import Note
 
 from ..services.jmdict import lookup_word, search_words, get_word_details
-from ..services.openai_client import generate_sentence, translate_sentence
+from ..services.openai_client import generate_sentence, translate_sentence, get_sentence_with_fallback, generate_and_translate
 from ..services.audio import generate_word_audio, generate_sentence_audio, get_media_folder
 
 
@@ -618,19 +618,20 @@ class CardCreatorDialog(QDialog):
         self._do_lookup()
 
     def _generate_sentence(self):
-        """Generate an example sentence using OpenAI."""
+        """Generate an example sentence using Tatoeba first, then falling back to AI."""
         word = self.word_input.text().strip()
         if not word:
             QMessageBox.warning(self, "Warning", "Please enter a target word first.")
             return
 
-        progress = QProgressDialog("Generating sentence...", None, 0, 0, self)
+        progress = QProgressDialog("Searching for example sentence...", None, 0, 0, self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.show()
 
         try:
             definition = self.definition_input.toPlainText().strip()
-            sentence = generate_sentence(word, definition if definition else None)
+            # Try Tatoeba first, fall back to AI if not found
+            sentence = get_sentence_with_fallback(word, definition if definition else None)
             self.sentence_input.setPlainText(sentence)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to generate sentence:\n{str(e)}")
@@ -712,14 +713,17 @@ class CardCreatorDialog(QDialog):
                 if definition:
                     self.definition_input.setPlainText(definition)
 
-            # 2. Generate sentence if empty
+            # 2. Generate sentence and translation if empty
             if not self.sentence_input.toPlainText().strip():
                 definition = self.definition_input.toPlainText().strip()
-                sentence = generate_sentence(word, definition if definition else None)
+                # Try Tatoeba first (which includes translation), fall back to AI
+                sentence, translation = generate_and_translate(word, definition if definition else None)
                 self.sentence_input.setPlainText(sentence)
-
-            # 3. Generate translation if empty
-            if not self.translation_input.toPlainText().strip():
+                # If translation wasn't already filled, set it
+                if not self.translation_input.toPlainText().strip() and translation:
+                    self.translation_input.setPlainText(translation)
+            elif not self.translation_input.toPlainText().strip():
+                # Sentence exists but translation doesn't - generate translation
                 sentence = self.sentence_input.toPlainText().strip()
                 if sentence:
                     translation = translate_sentence(sentence)

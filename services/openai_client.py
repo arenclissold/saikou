@@ -4,6 +4,7 @@ from typing import Optional, Tuple
 import json
 
 from aqt import mw
+from .tatoeba import get_example_sentence
 
 
 def get_config() -> dict:
@@ -131,6 +132,7 @@ Provide only the translation, nothing else."""
 def generate_and_translate(word: str, definition: Optional[str] = None) -> Tuple[str, str]:
     """
     Generate a sentence and translate it in one call for efficiency.
+    Tries Tatoeba first, then falls back to AI if no examples found.
 
     Args:
         word: The Japanese word to use
@@ -139,6 +141,12 @@ def generate_and_translate(word: str, definition: Optional[str] = None) -> Tuple
     Returns:
         Tuple of (Japanese sentence, English translation)
     """
+    # Try Tatoeba first
+    tatoeba_result = get_example_sentence(word)
+    if tatoeba_result:
+        return tatoeba_result
+
+    # Fall back to AI generation
     context = f" (meaning: {definition})" if definition else ""
 
     prompt = f"""Generate a natural Japanese sentence using the word "{word}"{context}, then translate it to English.
@@ -184,3 +192,23 @@ English: [translation]"""
         translation = lines[1].replace("English:", "").strip()
 
     return sentence, translation
+
+
+def get_sentence_with_fallback(word: str, definition: Optional[str] = None) -> str:
+    """
+    Get an example sentence, trying Tatoeba first, then falling back to AI.
+
+    Args:
+        word: The Japanese word to use
+        definition: Optional definition for context
+
+    Returns:
+        A Japanese sentence containing the word
+    """
+    # Try Tatoeba first
+    tatoeba_result = get_example_sentence(word)
+    if tatoeba_result:
+        return tatoeba_result[0]  # Return just the Japanese sentence
+
+    # Fall back to AI generation
+    return generate_sentence(word, definition)
