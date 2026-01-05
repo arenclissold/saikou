@@ -31,7 +31,7 @@ def get_api_key() -> str:
 def get_model() -> str:
     """Get the Gemini model from config."""
     config = get_config()
-    return config.get("gemini_model", "gemini-1.5-flash")
+    return config.get("gemini_model", "gemini-2.5-flash")
 
 
 def _make_request(prompt: str, system_instruction: Optional[str] = None, temperature: float = 0.7) -> str:

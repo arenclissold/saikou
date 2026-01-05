@@ -40,8 +40,10 @@ Before using 採鉱, you need to set up your Google API key:
 2. In Anki, go to **Saikou → Settings**
 3. Enter your Google API key in the "Google API Key" field
 4. (Optional) Adjust other settings:
-   - **Gemini Model**: Choose your preferred model (default: `gemini-1.5-flash`)
-   - **TTS Model**: Text-to-speech model (default: `gemini-2.5-pro-tts`)
+   - **Gemini Model**: Choose your preferred model (default: `gemini-2.5-flash`)
+     - Options: `gemini-3-flash-preview`, `gemini-3-pro-preview`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.5-pro`
+   - **TTS Model**: Text-to-speech model (default: `gemini-2.5-flash-preview-tts`)
+     - Options: `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`
    - **TTS Voice**: Select the voice for audio generation (default: `Kore`)
      - Options: `Puck`, `Charon`, `Kore`, `Fenrir`, `Aoede`
 5. Click **Save**
@@ -182,12 +184,12 @@ You're ready to go! Skip to [Creating Cards](#creating-cards).
 
 ### Settings (Saikou → Settings)
 
-| Setting        | Description                    | Default              |
-| -------------- | ------------------------------ | -------------------- |
-| Google API Key | Your Google API key (required) | -                    |
-| Gemini Model   | Model for text generation      | `gemini-1.5-flash`   |
-| TTS Model      | Model for audio generation     | `gemini-2.5-pro-tts` |
-| TTS Voice      | Voice for audio generation     | `Kore`               |
+| Setting        | Description                    | Default                        |
+| -------------- | ------------------------------ | ------------------------------ |
+| Google API Key | Your Google API key (required) | -                              |
+| Gemini Model   | Model for text generation      | `gemini-2.5-flash`             |
+| TTS Model      | Model for audio generation     | `gemini-2.5-flash-preview-tts` |
+| TTS Voice      | Voice for audio generation     | `Kore`                         |
 
 ### Field Mappings (Saikou → Map Fields...)
 

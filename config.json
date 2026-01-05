@@ -1,7 +1,7 @@
 {
 	"google_api_key": "",
-	"gemini_model": "gemini-3-flash",
-	"tts_model": "gemini-2.5-pro-tts",
+	"gemini_model": "gemini-2.5-flash",
+	"tts_model": "gemini-2.5-flash-preview-tts",
 	"tts_voice": "Kore",
 	"field_mapping": {
 		"deck_id": null,

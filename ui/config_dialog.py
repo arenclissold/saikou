@@ -16,14 +16,16 @@ from aqt import mw
 
 # Available options for dropdowns
 GEMINI_MODELS = [
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
-    "gemini-1.0-pro",
+    "gemini-3-flash-preview",
+    "gemini-3-pro-preview",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-pro",
 ]
 
 TTS_MODELS = [
-    "gemini-2.5-pro-tts",
-    "gemini-2.0-flash-exp",
+    "gemini-2.5-flash-preview-tts",
+    "gemini-2.5-pro-preview-tts",
 ]
 
 TTS_VOICES = [
@@ -137,13 +139,13 @@ class ConfigDialog(QDialog):
         self.api_key_input.setText(config.get("google_api_key", ""))
 
         # Gemini Model
-        model = config.get("gemini_model", "gemini-1.5-flash")
+        model = config.get("gemini_model", "gemini-2.5-flash")
         index = self.model_combo.findText(model)
         if index >= 0:
             self.model_combo.setCurrentIndex(index)
 
         # TTS Model
-        tts_model = config.get("tts_model", "gemini-2.5-pro-tts")
+        tts_model = config.get("tts_model", "gemini-2.5-flash-preview-tts")
         index = self.tts_model_combo.findText(tts_model)
         if index >= 0:
             self.tts_model_combo.setCurrentIndex(index)

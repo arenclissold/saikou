@@ -34,7 +34,7 @@ def get_api_key() -> str:
 def get_tts_model() -> str:
     """Get the TTS model from config."""
     config = get_config()
-    return config.get("tts_model", "gemini-2.5-pro-tts")
+    return config.get("tts_model", "gemini-2.5-flash-preview-tts")
 
 
 def get_tts_voice() -> str:
