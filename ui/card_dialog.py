@@ -28,8 +28,8 @@ from aqt.sound import av_player
 from anki.notes import Note
 
 from ..services.jmdict import lookup_word, search_words, get_word_details
-from ..services.openai_client import generate_sentence, translate_sentence, get_sentence_with_fallback, generate_and_translate
-from ..services.audio import generate_word_audio, generate_sentence_audio, get_media_folder
+from ..services.gemini_client import generate_sentence, translate_sentence, get_sentence_with_fallback, generate_and_translate
+from ..services.google_tts import generate_word_audio, generate_sentence_audio, get_media_folder
 
 
 def get_addon_name() -> str:
@@ -380,11 +380,11 @@ class CardCreatorDialog(QDialog):
     def _check_api_key(self):
         """Check if API key is configured and show warning if not."""
         config = get_config()
-        api_key = config.get("openai_api_key", "").strip()
+        api_key = config.get("google_api_key", "").strip()
 
         if not api_key:
             warning_text = (
-                '⚠️ OpenAI API key not configured. '
+                '⚠️ Google API key not configured. '
                 '<a href="config">Configure API key</a> to generate sentences, translations, and audio.'
             )
             self.api_key_warning_label.setText(warning_text)
@@ -639,7 +639,7 @@ class CardCreatorDialog(QDialog):
             progress.close()
 
     def _generate_translation(self):
-        """Generate translation using OpenAI."""
+        """Generate translation using Google Gemini."""
         sentence = self.sentence_input.toPlainText().strip()
         if not sentence:
             QMessageBox.warning(self, "Warning", "Please enter or generate a sentence first.")

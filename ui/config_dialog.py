@@ -15,25 +15,23 @@ from aqt import mw
 
 
 # Available options for dropdowns
-OPENAI_MODELS = [
-    "gpt-4o-mini",
-    "gpt-4o",
-    "gpt-4-turbo",
-    "gpt-3.5-turbo",
-]
-
-TTS_VOICES = [
-    "alloy",
-    "echo",
-    "fable",
-    "onyx",
-    "nova",
-    "shimmer",
+GEMINI_MODELS = [
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+    "gemini-1.0-pro",
 ]
 
 TTS_MODELS = [
-    "tts-1",
-    "tts-1-hd",
+    "gemini-2.5-pro-tts",
+    "gemini-2.0-flash-exp",
+]
+
+TTS_VOICES = [
+    "Puck",
+    "Charon",
+    "Kore",
+    "Fenrir",
+    "Aoede",
 ]
 
 
@@ -71,39 +69,39 @@ class ConfigDialog(QDialog):
         # Form layout
         form_layout = QFormLayout()
 
-        # OpenAI API Key with Show/Hide button
+        # Google API Key with Show/Hide button
         api_key_layout = QHBoxLayout()
         self.api_key_input = QLineEdit()
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_key_input.setPlaceholderText("sk-...")
+        self.api_key_input.setPlaceholderText("AIza...")
         api_key_layout.addWidget(self.api_key_input)
         self.show_key_btn = QPushButton("Show")
         self.show_key_btn.setCheckable(True)
         self.show_key_btn.toggled.connect(self._toggle_api_key_visibility)
         api_key_layout.addWidget(self.show_key_btn)
-        form_layout.addRow("OpenAI API Key:", api_key_layout)
+        form_layout.addRow("Google API Key:", api_key_layout)
 
-        # OpenAI Model
+        # Gemini Model
         self.model_combo = QComboBox()
-        self.model_combo.addItems(OPENAI_MODELS)
-        form_layout.addRow("OpenAI Model:", self.model_combo)
-
-        # TTS Voice
-        self.voice_combo = QComboBox()
-        self.voice_combo.addItems(TTS_VOICES)
-        form_layout.addRow("TTS Voice:", self.voice_combo)
+        self.model_combo.addItems(GEMINI_MODELS)
+        form_layout.addRow("Gemini Model:", self.model_combo)
 
         # TTS Model
         self.tts_model_combo = QComboBox()
         self.tts_model_combo.addItems(TTS_MODELS)
         form_layout.addRow("TTS Model:", self.tts_model_combo)
 
+        # TTS Voice
+        self.voice_combo = QComboBox()
+        self.voice_combo.addItems(TTS_VOICES)
+        form_layout.addRow("TTS Voice:", self.voice_combo)
+
         layout.addLayout(form_layout)
 
         # Help text
         help_label = QLabel(
-            '<small>Get your OpenAI API key from: '
-            '<a href="https://platform.openai.com/api-keys">platform.openai.com/api-keys</a></small>'
+            '<small>Get your Google API key from: '
+            '<a href="https://aistudio.google.com/app/apikey">aistudio.google.com/app/apikey</a></small>'
         )
         help_label.setOpenExternalLinks(True)
         layout.addWidget(help_label)
@@ -136,33 +134,33 @@ class ConfigDialog(QDialog):
         config = get_config()
 
         # API Key
-        self.api_key_input.setText(config.get("openai_api_key", ""))
+        self.api_key_input.setText(config.get("google_api_key", ""))
 
-        # OpenAI Model
-        model = config.get("openai_model", "gpt-4o-mini")
+        # Gemini Model
+        model = config.get("gemini_model", "gemini-1.5-flash")
         index = self.model_combo.findText(model)
         if index >= 0:
             self.model_combo.setCurrentIndex(index)
 
-        # TTS Voice
-        voice = config.get("tts_voice", "alloy")
-        index = self.voice_combo.findText(voice)
-        if index >= 0:
-            self.voice_combo.setCurrentIndex(index)
-
         # TTS Model
-        tts_model = config.get("tts_model", "tts-1")
+        tts_model = config.get("tts_model", "gemini-2.5-pro-tts")
         index = self.tts_model_combo.findText(tts_model)
         if index >= 0:
             self.tts_model_combo.setCurrentIndex(index)
 
+        # TTS Voice
+        voice = config.get("tts_voice", "Kore")
+        index = self.voice_combo.findText(voice)
+        if index >= 0:
+            self.voice_combo.setCurrentIndex(index)
+
     def _save_and_close(self):
         """Save configuration and close dialog."""
         config = {
-            "openai_api_key": self.api_key_input.text().strip(),
-            "openai_model": self.model_combo.currentText(),
-            "tts_voice": self.voice_combo.currentText(),
+            "google_api_key": self.api_key_input.text().strip(),
+            "gemini_model": self.model_combo.currentText(),
             "tts_model": self.tts_model_combo.currentText(),
+            "tts_voice": self.voice_combo.currentText(),
         }
 
         save_config(config)

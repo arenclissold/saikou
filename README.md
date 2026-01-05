@@ -2,7 +2,7 @@
 
 **AI-Powered Japanese Vocabulary Card Creator for Anki**
 
-*Mining the best example sentences for your Japanese learning journey*
+_Mining the best example sentences for your Japanese learning journey_
 
 ---
 
@@ -13,9 +13,9 @@
 ### Features
 
 - 🎯 **Smart Dictionary Lookup** - Real-time word definitions from Jisho.org
-- 📚 **Example Sentences** - Automatically fetches real example sentences from Tatoeba, with AI fallback
-- 🌐 **AI Translation** - Natural English translations for Japanese sentences
-- 🔊 **Audio Generation** - Text-to-speech audio for both words and sentences
+- 📚 **Example Sentences** - Automatically fetches real example sentences from Tatoeba, with Google Gemini AI fallback
+- 🌐 **AI Translation** - Natural English translations powered by Google Gemini
+- 🔊 **Audio Generation** - High-quality Japanese text-to-speech using Google Gemini TTS
 - 🎨 **Flexible Field Mapping** - Works with your existing note types or create a default setup
 - ⚡ **Async & Debounced** - Non-blocking UI with smart request throttling
 
@@ -31,20 +31,33 @@
 
 ## Quick Start
 
-### 1. Configure Your OpenAI API Key
+### 1. Configure Your Google API Key
 
-Before using 採鉱, you need to set up your OpenAI API key:
+Before using 採鉱, you need to set up your Google API key:
 
-1. Go to **Saikou → Settings**
-2. Enter your OpenAI API key in the "OpenAI API Key" field
-   - Get your API key from: https://platform.openai.com/api-keys
-3. (Optional) Adjust other settings:
-   - **OpenAI Model**: Choose your preferred model (default: `gpt-4o-mini`)
-   - **TTS Voice**: Select the voice for audio generation (default: `alloy`)
-   - **TTS Model**: Choose TTS model quality (default: `tts-1`)
-4. Click **Save**
+1. Get your API key from: https://aistudio.google.com/app/apikey
+   - Enable the **Gemini API** for your project
+2. In Anki, go to **Saikou → Settings**
+3. Enter your Google API key in the "Google API Key" field
+4. (Optional) Adjust other settings:
+   - **Gemini Model**: Choose your preferred model (default: `gemini-1.5-flash`)
+   - **TTS Model**: Text-to-speech model (default: `gemini-2.5-pro-tts`)
+   - **TTS Voice**: Select the voice for audio generation (default: `Kore`)
+     - Options: `Puck`, `Charon`, `Kore`, `Fenrir`, `Aoede`
+5. Click **Save**
 
-> **Note**: The OpenAI API key is required for generating sentences, translations, and audio. Without it, you'll only be able to look up definitions.
+> **Note**: The Google API key is required for generating sentences, translations, and audio. Without it, you'll only be able to look up definitions.
+
+#### Additional Settings (Optional)
+
+Adjust these in **Saikou → Settings**:
+
+- **Gemini Model**: Choose your preferred model (default: `gemini-1.5-flash`)
+- **TTS Model**: Text-to-speech model (default: `gemini-2.5-pro-tts`)
+- **TTS Voice**: Select the voice for audio generation (default: `Kore`)
+  - Options: `Puck`, `Charon`, `Kore`, `Fenrir`, `Aoede`
+
+> **Note**: The Google API key is required for generating sentences, translations, and audio. Without it, you'll only be able to look up definitions.
 
 ### 2. Set Up Field Mappings
 
@@ -88,11 +101,13 @@ You're ready to go! Skip to [Creating Cards](#creating-cards).
 3. Use the features:
 
    **Dictionary Search Panel (Left Side):**
+
    - Search for words to see definitions
    - Click a result to view details
    - Click **"Use This Word"** to populate the card creator
 
    **Card Creator (Right Side):**
+
    - **Generate All** - Automatically fills all empty fields
    - **Individual Generate Buttons** - Generate specific fields:
      - Definition (from Jisho)
@@ -117,8 +132,8 @@ You're ready to go! Skip to [Creating Cards](#creating-cards).
 ### Example Sentence Flow
 
 1. **Tatoeba Search** - First, 採鉱 searches Tatoeba.org for real example sentences containing your target word
-2. **AI Fallback** - If no Tatoeba results are found, it generates a sentence using OpenAI
-3. **Translation** - If Tatoeba provided the sentence, it includes the translation. Otherwise, AI generates one
+2. **AI Fallback** - If no Tatoeba results are found, it generates a sentence using Google Gemini
+3. **Translation** - If Tatoeba provided the sentence, it includes the translation. Otherwise, Gemini generates one
 
 ### Dictionary Lookup
 
@@ -128,8 +143,10 @@ You're ready to go! Skip to [Creating Cards](#creating-cards).
 
 ### Audio Generation
 
-- Uses OpenAI's Text-to-Speech API
-- Generates natural-sounding Japanese audio
+- Uses Google Gemini 2.5 Pro TTS model with advanced features:
+  - Enhanced expressivity and natural speech
+  - Precision pacing for better prosody
+  - Multiple voice options: Puck, Charon, Kore, Fenrir, Aoede
 - Files are saved to Anki's media folder
 - Automatically linked in your cards
 
@@ -137,10 +154,12 @@ You're ready to go! Skip to [Creating Cards](#creating-cards).
 
 ## Troubleshooting
 
-### "OpenAI API key not configured" Warning
+### "Google API key not configured" Warning
 
 - Go to **Saikou → Settings** and enter your API key
-- Make sure you click **Save**
+- Get your key from https://aistudio.google.com/app/apikey
+- Make sure the Gemini API is enabled (includes TTS capabilities)
+- Click **Save**
 
 ### "No fields mapped" Error
 
@@ -154,7 +173,7 @@ You're ready to go! Skip to [Creating Cards](#creating-cards).
 
 ### Example Sentences Not Found
 
-- This is normal! 採鉱 will automatically fall back to AI-generated sentences
+- This is normal! 採鉱 will automatically fall back to Google Gemini-generated sentences
 - Tatoeba may not have examples for every word, especially rare or new vocabulary
 
 ---
@@ -163,12 +182,12 @@ You're ready to go! Skip to [Creating Cards](#creating-cards).
 
 ### Settings (Saikou → Settings)
 
-| Setting | Description | Default |
-|---------|-------------|---------|
-| OpenAI API Key | Your OpenAI API key (required) | - |
-| OpenAI Model | Model for text generation | `gpt-4o-mini` |
-| TTS Voice | Voice for audio generation | `alloy` |
-| TTS Model | TTS model quality | `tts-1` |
+| Setting        | Description                    | Default              |
+| -------------- | ------------------------------ | -------------------- |
+| Google API Key | Your Google API key (required) | -                    |
+| Gemini Model   | Model for text generation      | `gemini-1.5-flash`   |
+| TTS Model      | Model for audio generation     | `gemini-2.5-pro-tts` |
+| TTS Voice      | Voice for audio generation     | `Kore`               |
 
 ### Field Mappings (Saikou → Map Fields...)
 
@@ -179,8 +198,8 @@ Configure which deck and note type to use, and map 採鉱 fields to your note ty
 ## Requirements
 
 - Anki 2.1.50 or later
-- OpenAI API key (for sentence generation, translation, and audio)
-- Internet connection (for dictionary lookups and Tatoeba searches)
+- Google API key with Gemini API enabled (includes TTS)
+- Internet connection (for dictionary lookups, Tatoeba searches, and AI features)
 
 ---
 
@@ -193,6 +212,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Support
 
 For issues, feature requests, or questions:
+
 - [GitHub Issues](https://github.com/yourusername/saikou/issues)
 - [Anki Add-on Page](https://ankiweb.net/shared/info/your-addon-id)
 

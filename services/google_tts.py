@@ -1,8 +1,9 @@
-# Audio generation service using OpenAI TTS
+# Audio generation service using Google Gemini TTS
 
 import os
 import hashlib
 import json
+import base64
 import urllib.request
 import urllib.error
 from typing import Optional
@@ -16,21 +17,30 @@ def get_config() -> dict:
 
 
 def get_api_key() -> str:
-    """Get the OpenAI API key from config."""
-    config = get_config()
-    return config.get("openai_api_key", "")
+    """
+    Get the Google API key from environment variable or config.
+    Priority: GOOGLE_API_KEY env var > config.json
+    """
+    # First try environment variable
+    api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
+    if api_key:
+        return api_key
 
-
-def get_tts_voice() -> str:
-    """Get the TTS voice from config."""
+    # Fall back to config.json
     config = get_config()
-    return config.get("tts_voice", "alloy")
+    return config.get("google_api_key", "")
 
 
 def get_tts_model() -> str:
     """Get the TTS model from config."""
     config = get_config()
-    return config.get("tts_model", "tts-1")
+    return config.get("tts_model", "gemini-2.5-pro-tts")
+
+
+def get_tts_voice() -> str:
+    """Get the TTS voice from config."""
+    config = get_config()
+    return config.get("tts_voice", "Kore")
 
 
 def get_media_folder() -> str:
@@ -56,7 +66,7 @@ def generate_audio_filename(text: str, prefix: str = "saikou") -> str:
 
 def generate_audio(text: str, filename: Optional[str] = None) -> str:
     """
-    Generate audio using OpenAI TTS and save to Anki media folder.
+    Generate audio using Google Gemini TTS and save to Anki media folder.
 
     Args:
         text: The text to convert to speech
@@ -71,23 +81,35 @@ def generate_audio(text: str, filename: Optional[str] = None) -> str:
     """
     api_key = get_api_key()
     if not api_key:
-        raise ValueError("OpenAI API key not configured. Please set it in the add-on config.")
+        raise ValueError("Google API key not configured. Please set it in the add-on config.")
 
     if not filename:
         filename = generate_audio_filename(text)
 
-    # Prepare the request
-    url = "https://api.openai.com/v1/audio/speech"
+    # Prepare the request using Gemini API
+    model = get_tts_model()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     headers = {
-        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
 
+    voice_name = get_tts_voice()
+
     payload = {
-        "model": get_tts_model(),
-        "input": text,
-        "voice": get_tts_voice(),
-        "response_format": "mp3",
+        "contents": [{
+            "parts": [{
+                "text": text
+            }]
+        }],
+        "generationConfig": {
+            "speechConfig": {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": {
+                        "voiceName": voice_name
+                    }
+                }
+            }
+        }
     }
 
     data = json.dumps(payload).encode("utf-8")
@@ -95,10 +117,32 @@ def generate_audio(text: str, filename: Optional[str] = None) -> str:
 
     try:
         with urllib.request.urlopen(req, timeout=60) as response:
-            audio_data = response.read()
+            result = json.loads(response.read().decode("utf-8"))
+
+        # Extract audio from Gemini response
+        # The response structure is: candidates[0].content.parts[0].inlineData.data
+        if "candidates" not in result or len(result["candidates"]) == 0:
+            raise Exception("No candidates in Gemini TTS response")
+
+        candidate = result["candidates"][0]
+        if "content" not in candidate or "parts" not in candidate["content"]:
+            raise Exception("Invalid response structure from Gemini TTS")
+
+        parts = candidate["content"]["parts"]
+        audio_data = None
+
+        for part in parts:
+            if "inlineData" in part and "data" in part["inlineData"]:
+                # Audio is base64-encoded in the response
+                audio_data = base64.b64decode(part["inlineData"]["data"])
+                break
+
+        if not audio_data:
+            raise Exception("No audio data in Gemini TTS response")
+
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8")
-        raise Exception(f"OpenAI TTS API error ({e.code}): {error_body}")
+        raise Exception(f"Google Gemini TTS API error ({e.code}): {error_body}")
     except urllib.error.URLError as e:
         raise Exception(f"Network error: {e.reason}")
 

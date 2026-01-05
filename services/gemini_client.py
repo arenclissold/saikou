@@ -1,7 +1,8 @@
-# OpenAI client for text generation
+# Google Gemini client for text generation
 
 from typing import Optional, Tuple
 import json
+import os
 
 from aqt import mw
 from .tatoeba import get_example_sentence
@@ -13,27 +14,37 @@ def get_config() -> dict:
 
 
 def get_api_key() -> str:
-    """Get the OpenAI API key from config."""
+    """
+    Get the Google API key from environment variable or config.
+    Priority: GOOGLE_API_KEY env var > config.json
+    """
+    # First try environment variable
+    api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
+    if api_key:
+        return api_key
+
+    # Fall back to config.json
     config = get_config()
-    return config.get("openai_api_key", "")
+    return config.get("google_api_key", "")
 
 
 def get_model() -> str:
-    """Get the OpenAI model from config."""
+    """Get the Gemini model from config."""
     config = get_config()
-    return config.get("openai_model", "gpt-4o-mini")
+    return config.get("gemini_model", "gemini-1.5-flash")
 
 
-def _make_request(endpoint: str, payload: dict) -> dict:
+def _make_request(prompt: str, system_instruction: Optional[str] = None, temperature: float = 0.7) -> str:
     """
-    Make a request to the OpenAI API.
+    Make a request to the Google Gemini API.
 
     Args:
-        endpoint: The API endpoint (e.g., 'chat/completions')
-        payload: The request payload
+        prompt: The user prompt
+        system_instruction: Optional system instruction
+        temperature: Temperature for generation (0.0 to 2.0)
 
     Returns:
-        The JSON response
+        The generated text response
 
     Raises:
         Exception: If the request fails
@@ -43,23 +54,56 @@ def _make_request(endpoint: str, payload: dict) -> dict:
 
     api_key = get_api_key()
     if not api_key:
-        raise ValueError("OpenAI API key not configured. Please set it in the add-on config.")
+        raise ValueError("Google API key not configured. Please set it in the add-on config.")
 
-    url = f"https://api.openai.com/v1/{endpoint}"
+    model = get_model()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+
     headers = {
-        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+
+    # Build the request payload
+    payload = {
+        "contents": [{
+            "parts": [{
+                "text": prompt
+            }]
+        }],
+        "generationConfig": {
+            "temperature": temperature,
+            "maxOutputTokens": 1000,
+        }
+    }
+
+    # Add system instruction if provided
+    if system_instruction:
+        payload["systemInstruction"] = {
+            "parts": [{
+                "text": system_instruction
+            }]
+        }
 
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
     try:
         with urllib.request.urlopen(req, timeout=60) as response:
-            return json.loads(response.read().decode("utf-8"))
+            result = json.loads(response.read().decode("utf-8"))
+
+        # Extract the text from the response
+        if "candidates" in result and len(result["candidates"]) > 0:
+            candidate = result["candidates"][0]
+            if "content" in candidate and "parts" in candidate["content"]:
+                parts = candidate["content"]["parts"]
+                if len(parts) > 0 and "text" in parts[0]:
+                    return parts[0]["text"].strip()
+
+        raise Exception("Unexpected response format from Gemini API")
+
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8")
-        raise Exception(f"OpenAI API error ({e.code}): {error_body}")
+        raise Exception(f"Google Gemini API error ({e.code}): {error_body}")
     except urllib.error.URLError as e:
         raise Exception(f"Network error: {e.reason}")
 
@@ -85,18 +129,9 @@ Requirements:
 - Keep the sentence relatively simple but meaningful
 - Only output the Japanese sentence, nothing else"""
 
-    payload = {
-        "model": get_model(),
-        "messages": [
-            {"role": "system", "content": "You are a Japanese language teacher helping students learn vocabulary through example sentences."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.7,
-        "max_tokens": 200,
-    }
+    system_instruction = "You are a Japanese language teacher helping students learn vocabulary through example sentences."
 
-    response = _make_request("chat/completions", payload)
-    return response["choices"][0]["message"]["content"].strip()
+    return _make_request(prompt, system_instruction, temperature=0.7)
 
 
 def translate_sentence(sentence: str) -> str:
@@ -115,18 +150,9 @@ def translate_sentence(sentence: str) -> str:
 
 Provide only the translation, nothing else."""
 
-    payload = {
-        "model": get_model(),
-        "messages": [
-            {"role": "system", "content": "You are a professional Japanese-English translator. Provide accurate, natural translations."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.3,
-        "max_tokens": 200,
-    }
+    system_instruction = "You are a professional Japanese-English translator. Provide accurate, natural translations."
 
-    response = _make_request("chat/completions", payload)
-    return response["choices"][0]["message"]["content"].strip()
+    return _make_request(prompt, system_instruction, temperature=0.3)
 
 
 def generate_and_translate(word: str, definition: Optional[str] = None) -> Tuple[str, str]:
@@ -160,18 +186,9 @@ Output format (exactly two lines):
 Japanese: [sentence]
 English: [translation]"""
 
-    payload = {
-        "model": get_model(),
-        "messages": [
-            {"role": "system", "content": "You are a Japanese language teacher. Generate example sentences and translations."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.7,
-        "max_tokens": 300,
-    }
+    system_instruction = "You are a Japanese language teacher. Generate example sentences and translations."
 
-    response = _make_request("chat/completions", payload)
-    content = response["choices"][0]["message"]["content"].strip()
+    content = _make_request(prompt, system_instruction, temperature=0.7)
 
     # Parse the response
     lines = content.split("\n")
