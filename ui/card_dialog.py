@@ -543,7 +543,7 @@ class CardCreatorDialog(QDialog):
 
     def _get_audio_path(self, sound_tag: str) -> str:
         """Extract the full file path from a sound tag."""
-        # Extract filename from [sound:filename.mp3]
+        # Extract filename from [sound:filename]
         match = re.search(r'\[sound:(.+?)\]', sound_tag)
         if match:
             filename = match.group(1)

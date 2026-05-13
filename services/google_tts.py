@@ -4,8 +4,10 @@ import os
 import hashlib
 import json
 import base64
+import re
 import urllib.request
 import urllib.error
+import wave
 from typing import Optional
 
 from aqt import mw
@@ -21,7 +23,7 @@ def get_api_key() -> str:
 def get_tts_model() -> str:
     """Get the TTS model from config."""
     config = get_config()
-    return config.get("tts_model", "gemini-2.5-flash-preview-tts")
+    return config.get("tts_model", "gemini-3.1-flash-tts-preview")
 
 
 def get_tts_voice() -> str:
@@ -44,11 +46,49 @@ def generate_audio_filename(text: str, prefix: str = "saikou") -> str:
         prefix: Prefix for the filename
 
     Returns:
-        A unique filename like 'saikou_abc123.mp3'
+        A unique filename like 'saikou_abc123.wav'
     """
     # Create a hash of the text for uniqueness
     text_hash = hashlib.md5(text.encode("utf-8")).hexdigest()[:12]
-    return f"{prefix}_{text_hash}.mp3"
+    return f"{prefix}_{text_hash}.wav"
+
+
+def _get_audio_part_data(part: dict) -> tuple[Optional[bytes], str]:
+    """Extract base64 audio bytes and MIME type from a Gemini response part."""
+    inline_data = part.get("inlineData") or part.get("inline_data")
+    if not inline_data:
+        return None, ""
+
+    data = inline_data.get("data")
+    if not data:
+        return None, inline_data.get("mimeType") or inline_data.get("mime_type") or ""
+
+    audio_data = base64.b64decode(data) if isinstance(data, str) else data
+    mime_type = inline_data.get("mimeType") or inline_data.get("mime_type") or ""
+    return audio_data, mime_type
+
+
+def _get_sample_rate(mime_type: str) -> int:
+    """Extract sample rate from a MIME type, falling back to Gemini TTS default."""
+    match = re.search(r"rate=(\d+)", mime_type)
+    if match:
+        return int(match.group(1))
+    return 24000
+
+
+def _write_audio_file(path: str, audio_data: bytes, mime_type: str) -> None:
+    """Write Gemini TTS audio to disk in a playable format."""
+    if "wav" in mime_type.lower():
+        with open(path, "wb") as f:
+            f.write(audio_data)
+        return
+
+    # Gemini TTS defaults to LINEAR16/PCM. Wrap it in a WAV container so Anki can play it.
+    with wave.open(path, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(_get_sample_rate(mime_type))
+        wf.writeframes(audio_data)
 
 
 def generate_audio(text: str, filename: Optional[str] = None) -> str:
@@ -107,8 +147,7 @@ def generate_audio(text: str, filename: Optional[str] = None) -> str:
         with urllib.request.urlopen(req, timeout=60) as response:
             result = json.loads(response.read().decode("utf-8"))
 
-        # Extract audio from Gemini response
-        # The response structure is: candidates[0].content.parts[0].inlineData.data
+        # Extract audio from Gemini response.
         if "candidates" not in result or len(result["candidates"]) == 0:
             raise Exception(f"No candidates in Gemini TTS response. Full response: {json.dumps(result)}")
 
@@ -117,9 +156,7 @@ def generate_audio(text: str, filename: Optional[str] = None) -> str:
         # Check for finish reason and handle it
         finish_reason = candidate.get("finishReason", "UNKNOWN")
         if finish_reason != "STOP":
-            # Look for additional error information
-            error_msg = f"TTS generation stopped with reason: {finish_reason}. {response.read().decode('utf-8')}"
-            raise Exception(error_msg)
+            raise Exception(f"TTS generation stopped with reason: {finish_reason}. Candidate: {json.dumps(candidate)}")
 
         if "content" not in candidate:
             raise Exception(f"No 'content' in candidate despite STOP finish reason. Candidate: {json.dumps(candidate)}")
@@ -129,12 +166,11 @@ def generate_audio(text: str, filename: Optional[str] = None) -> str:
 
         parts = candidate["content"]["parts"]
         audio_data = None
+        mime_type = ""
 
-        for i, part in enumerate(parts):
-            print(f"DEBUG: Part {i} keys: {part.keys()}")
-            if "inlineData" in part and "data" in part["inlineData"]:
-                # Audio is base64-encoded in the response
-                audio_data = base64.b64decode(part["inlineData"]["data"])
+        for part in parts:
+            audio_data, mime_type = _get_audio_part_data(part)
+            if audio_data:
                 break
 
         if not audio_data:
@@ -148,8 +184,7 @@ def generate_audio(text: str, filename: Optional[str] = None) -> str:
 
     # Save to media folder
     media_path = os.path.join(get_media_folder(), filename)
-    with open(media_path, "wb") as f:
-        f.write(audio_data)
+    _write_audio_file(media_path, audio_data, mime_type)
 
     # Register with Anki's media manager
     mw.col.media.add_file(media_path)
@@ -165,7 +200,7 @@ def generate_word_audio(word: str) -> str:
         word: The word to generate audio for
 
     Returns:
-        The sound tag string like '[sound:filename.mp3]'
+        The sound tag string like '[sound:filename.wav]'
     """
     filename = generate_audio_filename(word, prefix="saikou_word")
     filename = generate_audio(word, filename)
@@ -180,7 +215,7 @@ def generate_sentence_audio(sentence: str) -> str:
         sentence: The sentence to generate audio for
 
     Returns:
-        The sound tag string like '[sound:filename.mp3]'
+        The sound tag string like '[sound:filename.wav]'
     """
     filename = generate_audio_filename(sentence, prefix="saikou_sentence")
     filename = generate_audio(sentence, filename)

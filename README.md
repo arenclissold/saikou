@@ -40,22 +40,11 @@ _Mining the best example sentences for your Japanese learning journey_
 4. (Optional) Adjust other settings:
    - **Gemini Model**: Choose your preferred model (default: `gemini-2.5-flash`)
      - Options: `gemini-3-flash-preview`, `gemini-3-pro-preview`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.5-pro`
-   - **TTS Model**: Text-to-speech model (default: `gemini-2.5-flash-preview-tts`)
-     - Options: `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`
+   - **TTS Model**: Text-to-speech model (default: `gemini-3.1-flash-tts-preview`)
+     - Options: `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-tts`, `gemini-2.5-flash-lite-preview-tts`
    - **TTS Voice**: Select the voice for audio generation (default: `Kore`)
      - 30 voice options available including: `Zephyr`, `Puck`, `Charon`, `Kore`, `Fenrir`, `Leda`, `Orus`, `Aoede`, and more
 5. Click **Save**
-
-> **Note**: The Google API key is required for generating sentences, translations, and audio. Without it, you'll only be able to look up definitions.
-
-#### Additional Settings (Optional)
-
-Adjust these in **Saikou → Settings**:
-
-- **Gemini Model**: Choose your preferred model (default: `gemini-1.5-flash`)
-- **TTS Model**: Text-to-speech model (default: `gemini-2.5-pro-tts`)
-- **TTS Voice**: Select the voice for audio generation (default: `Kore`)
-  - Options: `Puck`, `Charon`, `Kore`, `Fenrir`, `Aoede`
 
 > **Note**: The Google API key is required for generating sentences, translations, and audio. Without it, you'll only be able to look up definitions.
 
@@ -101,13 +90,11 @@ You're ready to go! Skip to [Creating Cards](#creating-cards).
 3. Use the features:
 
    **Dictionary Search Panel (Left Side):**
-
    - Search for words to see definitions
    - Click a result to view details
    - Click **"Use This Word"** to populate the card creator
 
    **Card Creator (Right Side):**
-
    - **Generate All** - Automatically fills all empty fields
    - **Individual Generate Buttons** - Generate specific fields:
      - Definition (from Jisho)
@@ -143,11 +130,11 @@ You're ready to go! Skip to [Creating Cards](#creating-cards).
 
 ### Audio Generation
 
-- Uses Google Gemini 2.5 Pro TTS model with advanced features:
+- Uses Google Gemini TTS models with advanced features:
   - Enhanced expressivity and natural speech
   - Precision pacing for better prosody
-  - Multiple voice options: Puck, Charon, Kore, Fenrir, Aoede
-- Files are saved to Anki's media folder
+  - Multiple voice options including Kore, Zephyr, Puck, Charon, Fenrir, and Aoede
+- Files are saved as WAV audio in Anki's media folder
 - Automatically linked in your cards
 
 ---
@@ -186,7 +173,7 @@ You're ready to go! Skip to [Creating Cards](#creating-cards).
 | -------------- | ------------------------------ | ------------------------------ |
 | Google API Key | Your Google API key (required) | -                              |
 | Gemini Model   | Model for text generation      | `gemini-2.5-flash`             |
-| TTS Model      | Model for audio generation     | `gemini-2.5-flash-preview-tts` |
+| TTS Model      | Model for audio generation     | `gemini-3.1-flash-tts-preview` |
 | TTS Voice      | Voice for audio generation     | `Kore`                         |
 
 ### Field Mappings (Saikou → Map Fields...)

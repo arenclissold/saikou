@@ -24,8 +24,9 @@ GEMINI_MODELS = [
 ]
 
 TTS_MODELS = [
-    "gemini-2.5-flash-preview-tts",
-    "gemini-2.5-pro-preview-tts",
+    "gemini-3.1-flash-tts-preview",
+    "gemini-2.5-flash-tts",
+    "gemini-2.5-flash-lite-preview-tts",
 ]
 
 TTS_VOICES = [
@@ -154,7 +155,7 @@ class ConfigDialog(QDialog):
             self.model_combo.setCurrentIndex(index)
 
         # TTS Model
-        tts_model = config.get("tts_model", "gemini-2.5-flash-preview-tts")
+        tts_model = config.get("tts_model", "gemini-3.1-flash-tts-preview")
         index = self.tts_model_combo.findText(tts_model)
         if index >= 0:
             self.tts_model_combo.setCurrentIndex(index)

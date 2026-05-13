@@ -11,7 +11,7 @@ DEFAULT_CONFIG_FILENAME = "default_config.json"
 FALLBACK_DEFAULT_CONFIG = {
     "google_api_key": "",
     "gemini_model": "gemini-2.5-flash",
-    "tts_model": "gemini-2.5-flash-preview-tts",
+    "tts_model": "gemini-3.1-flash-tts-preview",
     "tts_voice": "Kore",
     "field_mapping": {
         "deck_id": None,
