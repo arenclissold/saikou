@@ -30,16 +30,7 @@ from anki.notes import Note
 from ..services.jmdict import lookup_word, search_words, get_word_details
 from ..services.gemini_client import generate_sentence, translate_sentence, get_sentence_with_fallback, generate_and_translate
 from ..services.google_tts import generate_word_audio, generate_sentence_audio, get_media_folder
-
-
-def get_addon_name() -> str:
-    """Get the add-on folder name."""
-    return __name__.split(".")[0]
-
-
-def get_config() -> dict:
-    """Get the current configuration."""
-    return mw.addonManager.getConfig(get_addon_name()) or {}
+from ..utils import get_config
 
 
 def get_field_mapping() -> dict:

@@ -9,24 +9,11 @@ import urllib.error
 from typing import Optional
 
 from aqt import mw
-
-
-def get_config() -> dict:
-    """Get the add-on configuration."""
-    return mw.addonManager.getConfig(__name__.split(".")[0]) or {}
+from ..utils import get_config
 
 
 def get_api_key() -> str:
-    """
-    Get the Google API key from environment variable or config.
-    Priority: GOOGLE_API_KEY env var > config.json
-    """
-    # First try environment variable
-    api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
-    if api_key:
-        return api_key
-
-    # Fall back to config.json
+    """Get the Google API key from local config/defaults."""
     config = get_config()
     return config.get("google_api_key", "")
 
@@ -102,6 +89,7 @@ def generate_audio(text: str, filename: Optional[str] = None) -> str:
             }]
         }],
         "generationConfig": {
+            "responseModalities": ["AUDIO"],
             "speechConfig": {
                 "voiceConfig": {
                     "prebuiltVoiceConfig": {
@@ -122,23 +110,35 @@ def generate_audio(text: str, filename: Optional[str] = None) -> str:
         # Extract audio from Gemini response
         # The response structure is: candidates[0].content.parts[0].inlineData.data
         if "candidates" not in result or len(result["candidates"]) == 0:
-            raise Exception("No candidates in Gemini TTS response")
+            raise Exception(f"No candidates in Gemini TTS response. Full response: {json.dumps(result)}")
 
         candidate = result["candidates"][0]
-        if "content" not in candidate or "parts" not in candidate["content"]:
-            raise Exception("Invalid response structure from Gemini TTS")
+
+        # Check for finish reason and handle it
+        finish_reason = candidate.get("finishReason", "UNKNOWN")
+        if finish_reason != "STOP":
+            # Look for additional error information
+            error_msg = f"TTS generation stopped with reason: {finish_reason}. {response.read().decode('utf-8')}"
+            raise Exception(error_msg)
+
+        if "content" not in candidate:
+            raise Exception(f"No 'content' in candidate despite STOP finish reason. Candidate: {json.dumps(candidate)}")
+
+        if "parts" not in candidate["content"]:
+            raise Exception(f"No 'parts' in content. Content keys: {candidate['content'].keys()}, Content: {json.dumps(candidate['content'])[:200]}")
 
         parts = candidate["content"]["parts"]
         audio_data = None
 
-        for part in parts:
+        for i, part in enumerate(parts):
+            print(f"DEBUG: Part {i} keys: {part.keys()}")
             if "inlineData" in part and "data" in part["inlineData"]:
                 # Audio is base64-encoded in the response
                 audio_data = base64.b64decode(part["inlineData"]["data"])
                 break
 
         if not audio_data:
-            raise Exception("No audio data in Gemini TTS response")
+            raise Exception(f"No audio data in Gemini TTS response. Parts structure: {json.dumps(parts)[:500]}")
 
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8")

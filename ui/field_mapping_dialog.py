@@ -15,6 +15,8 @@ from aqt.qt import (
 )
 from aqt import mw
 
+from ..utils import get_config, save_config
+
 
 # Saikou fields that need to be mapped
 SAIKOU_FIELDS = [
@@ -40,16 +42,6 @@ FIELD_ALIASES = {
 def get_addon_name() -> str:
     """Get the add-on folder name."""
     return __name__.split(".")[0]
-
-
-def get_config() -> dict:
-    """Get the current configuration."""
-    return mw.addonManager.getConfig(get_addon_name()) or {}
-
-
-def save_config(config: dict):
-    """Save the configuration."""
-    mw.addonManager.writeConfig(get_addon_name(), config)
 
 
 def _get_template_path(filename: str) -> str:

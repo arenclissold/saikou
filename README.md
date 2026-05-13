@@ -33,8 +33,6 @@ _Mining the best example sentences for your Japanese learning journey_
 
 ### 1. Configure Your Google API Key
 
-Before using 採鉱, you need to set up your Google API key:
-
 1. Get your API key from: https://aistudio.google.com/app/apikey
    - Enable the **Gemini API** for your project
 2. In Anki, go to **Saikou → Settings**
@@ -45,7 +43,7 @@ Before using 採鉱, you need to set up your Google API key:
    - **TTS Model**: Text-to-speech model (default: `gemini-2.5-flash-preview-tts`)
      - Options: `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`
    - **TTS Voice**: Select the voice for audio generation (default: `Kore`)
-     - Options: `Puck`, `Charon`, `Kore`, `Fenrir`, `Aoede`
+     - 30 voice options available including: `Zephyr`, `Puck`, `Charon`, `Kore`, `Fenrir`, `Leda`, `Orus`, `Aoede`, and more
 5. Click **Save**
 
 > **Note**: The Google API key is required for generating sentences, translations, and audio. Without it, you'll only be able to look up definitions.

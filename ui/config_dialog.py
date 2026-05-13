@@ -11,8 +11,8 @@ from aqt.qt import (
     QPushButton,
     QMessageBox,
 )
-from aqt import mw
 
+from ..utils import get_config, save_config
 
 # Available options for dropdowns
 GEMINI_MODELS = [
@@ -29,28 +29,37 @@ TTS_MODELS = [
 ]
 
 TTS_VOICES = [
+    "Zephyr",
     "Puck",
     "Charon",
     "Kore",
     "Fenrir",
+    "Leda",
+    "Orus",
     "Aoede",
+    "Callirrhoe",
+    "Autonoe",
+    "Enceladus",
+    "Iapetus",
+    "Umbriel",
+    "Algieba",
+    "Despina",
+    "Erinome",
+    "Algenib",
+    "Rasalgethi",
+    "Laomedeia",
+    "Achernar",
+    "Alnilam",
+    "Schedar",
+    "Gacrux",
+    "Pulcherrima",
+    "Achird",
+    "Zubenelgenubi",
+    "Vindemiatrix",
+    "Sadachbia",
+    "Sadaltager",
+    "Sulafat",
 ]
-
-
-
-def get_addon_name() -> str:
-    """Get the add-on folder name."""
-    return __name__.split(".")[0]
-
-
-def get_config() -> dict:
-    """Get the current configuration."""
-    return mw.addonManager.getConfig(get_addon_name()) or {}
-
-
-def save_config(config: dict):
-    """Save the configuration."""
-    mw.addonManager.writeConfig(get_addon_name(), config)
 
 
 class ConfigDialog(QDialog):
@@ -158,12 +167,13 @@ class ConfigDialog(QDialog):
 
     def _save_and_close(self):
         """Save configuration and close dialog."""
-        config = {
+        config = get_config()
+        config.update({
             "google_api_key": self.api_key_input.text().strip(),
             "gemini_model": self.model_combo.currentText(),
             "tts_model": self.tts_model_combo.currentText(),
             "tts_voice": self.voice_combo.currentText(),
-        }
+        })
 
         save_config(config)
         self.accept()

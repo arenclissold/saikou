@@ -2,28 +2,13 @@
 
 from typing import Optional, Tuple
 import json
-import os
 
-from aqt import mw
 from .tatoeba import get_example_sentence
-
-
-def get_config() -> dict:
-    """Get the add-on configuration."""
-    return mw.addonManager.getConfig(__name__.split(".")[0]) or {}
+from ..utils import get_config
 
 
 def get_api_key() -> str:
-    """
-    Get the Google API key from environment variable or config.
-    Priority: GOOGLE_API_KEY env var > config.json
-    """
-    # First try environment variable
-    api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
-    if api_key:
-        return api_key
-
-    # Fall back to config.json
+    """Get the Google API key from local config/defaults."""
     config = get_config()
     return config.get("google_api_key", "")
 
