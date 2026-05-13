@@ -39,24 +39,6 @@ def get_field_mapping() -> dict:
     return config.get("field_mapping", {})
 
 
-class LookupWorker(QThread):
-    """Worker thread for async dictionary lookup."""
-
-    finished = pyqtSignal(str)  # definition or empty string
-
-    def __init__(self, word: str):
-        super().__init__()
-        self.word = word
-
-    def run(self):
-        """Perform the lookup in background thread."""
-        try:
-            definition = lookup_word(self.word)
-            self.finished.emit(definition or "")
-        except Exception:
-            self.finished.emit("")
-
-
 class SearchWorker(QThread):
     """Worker thread for async dictionary search."""
 
@@ -121,12 +103,6 @@ class CardCreatorDialog(QDialog):
         self.setMinimumWidth(1000)
         self.setMinimumHeight(700)
 
-        # Debounce timer for word lookup
-        self._lookup_timer = QTimer()
-        self._lookup_timer.setSingleShot(True)
-        self._lookup_timer.setInterval(300)  # 300ms debounce
-        self._lookup_timer.timeout.connect(self._do_lookup)
-
         # Debounce timer for dictionary search
         self._search_timer = QTimer()
         self._search_timer.setSingleShot(True)
@@ -134,7 +110,6 @@ class CardCreatorDialog(QDialog):
         self._search_timer.timeout.connect(self._do_search)
 
         # Current workers
-        self._lookup_worker = None
         self._search_worker = None
         self._details_worker = None
         self._generation_workers = {}
@@ -269,7 +244,6 @@ class CardCreatorDialog(QDialog):
         word_layout.setSpacing(5)
         self.word_input = QLineEdit()
         self.word_input.setPlaceholderText("The word you want to learn")
-        self.word_input.textChanged.connect(self._on_word_changed)
         self.word_input.setMinimumHeight(32)
         word_layout.addWidget(self.word_input)
         self.generate_all_btn = QPushButton("Generate All")
@@ -717,46 +691,12 @@ class CardCreatorDialog(QDialog):
             self._track_generate_all_task(task_name)
         return started
 
-    def _on_word_changed(self, text: str):
-        """Handle target word changes - debounced auto-lookup."""
-        # Cancel any pending lookup
-        self._lookup_timer.stop()
-
-        if text.strip():
-            # Start debounce timer
-            self._lookup_timer.start()
-
-    def _do_lookup(self):
-        """Perform the actual lookup (called after debounce)."""
-        word = self.word_input.text().strip()
-        if not word:
-            return
-
-        # Cancel any running worker
-        if self._lookup_worker and self._lookup_worker.isRunning():
-            self._lookup_worker.terminate()
-            self._lookup_worker.wait()
-
-        # Start new worker
-        self._lookup_worker = LookupWorker(word)
-        self._lookup_worker.finished.connect(self._on_lookup_finished)
-        self._lookup_worker.start()
-
-    def _on_lookup_finished(self, definition: str):
-        """Handle lookup result from worker thread."""
-        if definition:
-            self.definition_input.setPlainText(definition)
-        # Don't clear if no definition - user might have typed something
-
     def _lookup_definition(self):
         """Manual lookup button - also async."""
         word = self.word_input.text().strip()
         if not word:
             QMessageBox.warning(self, "Warning", "Please enter a target word first.")
             return
-
-        # Cancel any pending debounced lookup
-        self._lookup_timer.stop()
 
         self._start_generation_task(
             "definition",
@@ -1033,11 +973,7 @@ class CardCreatorDialog(QDialog):
 
     def closeEvent(self, event):
         """Clean up on close."""
-        self._lookup_timer.stop()
         self._search_timer.stop()
-        if self._lookup_worker and self._lookup_worker.isRunning():
-            self._lookup_worker.terminate()
-            self._lookup_worker.wait()
         if self._search_worker and self._search_worker.isRunning():
             self._search_worker.terminate()
             self._search_worker.wait()
