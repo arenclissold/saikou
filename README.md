@@ -108,7 +108,7 @@ You're ready to go! Skip to [Creating Cards](#creating-cards).
 ### Tips
 
 - **Target Word** is always required
-- The dictionary lookup is automatic and debounced (waits 300ms after you stop typing)
+- Use **Lookup** or **Generate All** to fill the definition field
 - Example sentences are fetched from Tatoeba first (real examples), then AI-generated if none found
 - Audio files are saved to Anki's media folder and automatically linked
 
@@ -124,8 +124,8 @@ You're ready to go! Skip to [Creating Cards](#creating-cards).
 
 ### Dictionary Lookup
 
-- Uses Jisho.org API for real-time word definitions
-- Async and debounced to prevent UI blocking
+- Uses Jisho.org API for word definitions
+- Runs lookups asynchronously to prevent UI blocking
 - Shows kanji, readings, and English definitions
 
 ### Audio Generation

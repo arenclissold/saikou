@@ -9,7 +9,6 @@ from aqt.qt import (
     QLineEdit,
     QComboBox,
     QPushButton,
-    QMessageBox,
 )
 
 from ..utils import get_config, save_config

@@ -1,6 +1,5 @@
 # Field mapping dialog for Saikou
 
-import os
 from pathlib import Path
 
 from aqt.qt import (

@@ -7,6 +7,30 @@ from typing import Dict, List, Optional
 
 # Jisho API endpoint
 JISHO_API_URL = "https://jisho.org/api/v1/search/words"
+USER_AGENT = "Saikou-Anki-Addon/1.0"
+
+
+def _fetch_jisho_data(query: str) -> dict:
+    """Fetch raw search results from Jisho."""
+    encoded_query = urllib.request.quote(query)
+    url = f"{JISHO_API_URL}?keyword={encoded_query}"
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+
+    with urllib.request.urlopen(req, timeout=10) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _find_best_entry(entries: List[Dict], query: str) -> Optional[Dict]:
+    """Return the exact Jisho match when possible, otherwise the first result."""
+    if not entries:
+        return None
+
+    for entry in entries:
+        for jp in entry.get("japanese", []):
+            if jp.get("word") == query or jp.get("reading") == query:
+                return entry
+
+    return entries[0]
 
 
 def lookup_word(word: str) -> Optional[str]:
@@ -20,35 +44,10 @@ def lookup_word(word: str) -> Optional[str]:
         A formatted string with definitions, or None if not found
     """
     try:
-        # Build the API URL
-        encoded_word = urllib.request.quote(word)
-        url = f"{JISHO_API_URL}?keyword={encoded_word}"
-
-        req = urllib.request.Request(
-            url,
-            headers={"User-Agent": "Saikou-Anki-Addon/1.0"}
-        )
-
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode("utf-8"))
-
-        if not data.get("data"):
-            return None
-
-        # Find the best match (exact match preferred)
-        best_entry = None
-        for entry in data["data"]:
-            japanese = entry.get("japanese", [])
-            for jp in japanese:
-                if jp.get("word") == word or jp.get("reading") == word:
-                    best_entry = entry
-                    break
-            if best_entry:
-                break
-
-        # If no exact match, use the first result
+        entries = _fetch_jisho_data(word).get("data", [])
+        best_entry = _find_best_entry(entries, word)
         if not best_entry:
-            best_entry = data["data"][0]
+            return None
 
         return format_jisho_entry(best_entry)
 
@@ -69,34 +68,10 @@ def get_word_details(word: str) -> Optional[Dict]:
         Dictionary with word details or None if not found
     """
     try:
-        encoded_word = urllib.request.quote(word)
-        url = f"{JISHO_API_URL}?keyword={encoded_word}"
-
-        req = urllib.request.Request(
-            url,
-            headers={"User-Agent": "Saikou-Anki-Addon/1.0"}
-        )
-
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode("utf-8"))
-
-        if not data.get("data"):
-            return None
-
-        # Find the best match (exact match preferred)
-        best_entry = None
-        for entry in data["data"]:
-            japanese = entry.get("japanese", [])
-            for jp in japanese:
-                if jp.get("word") == word or jp.get("reading") == word:
-                    best_entry = entry
-                    break
-            if best_entry:
-                break
-
-        # If no exact match, use the first result
+        entries = _fetch_jisho_data(word).get("data", [])
+        best_entry = _find_best_entry(entries, word)
         if not best_entry:
-            best_entry = data["data"][0]
+            return None
 
         # Extract word details
         japanese = best_entry.get("japanese", [{}])[0]
@@ -114,7 +89,7 @@ def get_word_details(word: str) -> Optional[Dict]:
         return None
 
 
-def format_jisho_entry(entry: dict) -> str:
+def format_jisho_entry(entry: dict) -> Optional[str]:
     """
     Format a Jisho API entry into a readable definition string.
 
@@ -158,17 +133,7 @@ def search_words(query: str, limit: int = 10) -> List[Dict]:
     results = []
 
     try:
-        encoded_query = urllib.request.quote(query)
-        url = f"{JISHO_API_URL}?keyword={encoded_query}"
-
-        req = urllib.request.Request(
-            url,
-            headers={"User-Agent": "Saikou-Anki-Addon/1.0"}
-        )
-
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode("utf-8"))
-
+        data = _fetch_jisho_data(query)
         for entry in data.get("data", [])[:limit]:
             japanese = entry.get("japanese", [{}])[0]
             word_text = japanese.get("word") or japanese.get("reading", "")

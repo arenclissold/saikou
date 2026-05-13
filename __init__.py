@@ -2,6 +2,7 @@
 # Entry point for Anki add-on
 
 from aqt import mw
+from aqt import gui_hooks
 from aqt.qt import QAction, QMenu, QTimer
 
 from .ui.card_dialog import CardCreatorDialog
@@ -88,16 +89,16 @@ def setup_menu():
         mw.form.menubar.update()
         mw.form.menubar.repaint()
 
-    # Verify all actions were added
-    action_texts = [action.text() if action.text() else "(separator)" for action in saikou_menu.actions()]
+    action_texts = [
+        action.text() if action.text() else "(separator)"
+        for action in saikou_menu.actions()
+    ]
     if "Settings" not in action_texts:
         print(f"ERROR: Settings not found in menu! Actions: {action_texts}")
-    else:
-        print(f"Saikou menu successfully set up with actions: {action_texts}")
 
 # Set up menu when main window is ready
 # Use a hook to ensure menu is created after window is fully initialized
-from aqt import gui_hooks
+
 
 def on_profile_loaded():
     """Set up menu after profile is loaded."""
@@ -107,6 +108,8 @@ gui_hooks.profile_did_open.append(on_profile_loaded)
 
 # Also try to set up immediately if window is already ready
 # Use a timer to delay slightly and avoid macOS menu caching issues
+
+
 def delayed_setup():
     """Set up menu with a slight delay to avoid macOS caching."""
     if mw and mw.form and mw.form.menubar:
@@ -120,11 +123,13 @@ if mw and mw.form and mw.form.menubar:
     QTimer.singleShot(100, delayed_setup)
 
 # Set custom config action to use our dialog instead of default JSON editor
+
+
 def addon_config_action():
     """Custom config action called from add-on manager."""
     dialog = ConfigDialog(mw)
     dialog.exec()
 
 # Get add-on name (package name from __name__)
-addon_name = __name__.split('.')[0]
+addon_name = __name__.split(".")[0]
 mw.addonManager.setConfigAction(addon_name, addon_config_action)
