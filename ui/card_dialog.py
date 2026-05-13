@@ -337,6 +337,10 @@ class CardCreatorDialog(QDialog):
 
         button_layout.addStretch()
 
+        self.clear_btn = QPushButton("Clear")
+        self.clear_btn.clicked.connect(self._clear_form)
+        button_layout.addWidget(self.clear_btn)
+
         self.save_btn = QPushButton("Save Card")
         self.save_btn.clicked.connect(self._save_card)
         self._update_save_button_state()
