@@ -2,6 +2,7 @@
 
 import os
 import re
+from typing import Callable
 
 from aqt.qt import (
     QDialog,
@@ -14,7 +15,6 @@ from aqt.qt import (
     QTextEdit,
     QPushButton,
     QMessageBox,
-    QProgressDialog,
     QTimer,
     QThread,
     QListWidget,
@@ -93,6 +93,25 @@ class WordDetailsWorker(QThread):
             self.finished.emit({})
 
 
+class GenerationWorker(QThread):
+    """Worker thread for long-running generation tasks."""
+
+    succeeded = pyqtSignal(str, object)  # task name, result
+    failed = pyqtSignal(str, str)  # task name, error message
+
+    def __init__(self, task_name: str, task_func: Callable[[], object]):
+        super().__init__()
+        self.task_name = task_name
+        self.task_func = task_func
+
+    def run(self):
+        """Run the generation task in a background thread."""
+        try:
+            self.succeeded.emit(self.task_name, self.task_func())
+        except Exception as e:
+            self.failed.emit(self.task_name, str(e))
+
+
 class CardCreatorDialog(QDialog):
     """Dialog for creating Japanese vocabulary cards with AI assistance."""
 
@@ -118,6 +137,10 @@ class CardCreatorDialog(QDialog):
         self._lookup_worker = None
         self._search_worker = None
         self._details_worker = None
+        self._generation_workers = {}
+        self._generation_callbacks = {}
+        self._generate_all_tasks = set()
+        self._generate_all_active = False
 
         self._setup_ui()
 
@@ -564,6 +587,136 @@ class CardCreatorDialog(QDialog):
             if audio_path and os.path.exists(audio_path):
                 av_player.play_file(audio_path)
 
+    def _is_generation_task_running(self, task_name: str) -> bool:
+        """Check whether a generation task is already running."""
+        worker = self._generation_workers.get(task_name)
+        return bool(worker and worker.isRunning())
+
+    def _set_buttons_busy(self, buttons, busy_text: str):
+        """Disable buttons and return their original labels."""
+        original_texts = []
+        for button in buttons:
+            original_texts.append(button.text())
+            button.setEnabled(False)
+            button.setText(busy_text)
+        return original_texts
+
+    def _restore_buttons(self, buttons, original_texts):
+        """Restore buttons after a background task finishes."""
+        for button, text in zip(buttons, original_texts):
+            button.setText(text)
+            button.setEnabled(True)
+
+    def _start_generation_task(
+        self,
+        task_name: str,
+        buttons,
+        busy_text: str,
+        task_func: Callable[[], object],
+        on_success: Callable[[object], None],
+        error_prefix: str,
+        on_finished: Callable[[], None] = None,
+    ) -> bool:
+        """Start a long-running task without blocking the UI."""
+        if self._is_generation_task_running(task_name):
+            return False
+
+        if not isinstance(buttons, (list, tuple)):
+            buttons = [buttons]
+
+        original_texts = self._set_buttons_busy(buttons, busy_text)
+        worker = GenerationWorker(task_name, task_func)
+        self._generation_workers[task_name] = worker
+        self._generation_callbacks[task_name] = {
+            "buttons": buttons,
+            "original_texts": original_texts,
+            "on_success": on_success,
+            "error_prefix": error_prefix,
+            "on_finished": on_finished,
+        }
+
+        worker.succeeded.connect(self._on_generation_task_succeeded)
+        worker.failed.connect(self._on_generation_task_failed)
+        worker.finished.connect(lambda name=task_name: self._cleanup_generation_worker(name))
+        worker.start()
+        return True
+
+    def _cleanup_generation_worker(self, task_name: str):
+        """Release a finished generation worker."""
+        worker = self._generation_workers.pop(task_name, None)
+        if worker:
+            worker.deleteLater()
+
+    def _finish_generation_task(self, task_name: str):
+        """Restore UI state for a finished generation task."""
+        callback = self._generation_callbacks.pop(task_name, None)
+        if not callback:
+            return
+
+        self._restore_buttons(callback["buttons"], callback["original_texts"])
+        on_finished = callback.get("on_finished")
+        if on_finished:
+            on_finished()
+
+    def _on_generation_task_succeeded(self, task_name: str, result: object):
+        """Apply a completed generation task result."""
+        callback = self._generation_callbacks.get(task_name)
+        if not callback:
+            return
+
+        try:
+            callback["on_success"](result)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"{callback['error_prefix']}:\n{str(e)}")
+        finally:
+            self._finish_generation_task(task_name)
+
+    def _on_generation_task_failed(self, task_name: str, error_message: str):
+        """Show a generation task error and restore its button."""
+        callback = self._generation_callbacks.get(task_name)
+        if callback:
+            QMessageBox.critical(self, "Error", f"{callback['error_prefix']}:\n{error_message}")
+        self._finish_generation_task(task_name)
+
+    def _set_generate_all_active(self, active: bool):
+        """Update Generate All button state without blocking the dialog."""
+        self._generate_all_active = active
+        self.generate_all_btn.setEnabled(not active)
+        self.generate_all_btn.setText("Generating..." if active else "Generate All")
+
+    def _track_generate_all_task(self, task_name: str):
+        """Track a task started by Generate All."""
+        self._generate_all_tasks.add(task_name)
+
+    def _finish_generate_all_task(self, task_name: str):
+        """Mark one Generate All task as finished."""
+        self._generate_all_tasks.discard(task_name)
+        if self._generate_all_active and not self._generate_all_tasks:
+            self._set_generate_all_active(False)
+
+    def _start_generate_all_task(
+        self,
+        task_name: str,
+        buttons,
+        busy_text: str,
+        task_func: Callable[[], object],
+        on_success: Callable[[object], None],
+        error_prefix: str,
+    ) -> bool:
+        """Start and track a task as part of Generate All."""
+        started = self._start_generation_task(
+            task_name,
+            buttons,
+            busy_text,
+            task_func,
+            on_success,
+            error_prefix,
+            on_finished=lambda name=task_name: self._finish_generate_all_task(name),
+        )
+        if started:
+            self._track_generate_all_task(task_name)
+        return started
+
     def _on_word_changed(self, text: str):
         """Handle target word changes - debounced auto-lookup."""
         # Cancel any pending lookup
@@ -605,8 +758,19 @@ class CardCreatorDialog(QDialog):
         # Cancel any pending debounced lookup
         self._lookup_timer.stop()
 
-        # Do immediate lookup
-        self._do_lookup()
+        self._start_generation_task(
+            "definition",
+            self.lookup_definition_btn,
+            "Looking...",
+            lambda: lookup_word(word),
+            self._apply_definition_result,
+            "Failed to look up definition",
+        )
+
+    def _apply_definition_result(self, definition: object):
+        """Apply a definition lookup result."""
+        if definition:
+            self.definition_input.setPlainText(str(definition))
 
     def _generate_sentence(self):
         """Generate an example sentence using Tatoeba first, then falling back to AI."""
@@ -615,19 +779,19 @@ class CardCreatorDialog(QDialog):
             QMessageBox.warning(self, "Warning", "Please enter a target word first.")
             return
 
-        progress = QProgressDialog("Searching for example sentence...", None, 0, 0, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
+        definition = self.definition_input.toPlainText().strip()
+        self._start_generation_task(
+            "sentence",
+            self.generate_sentence_btn,
+            "Generating...",
+            lambda: get_sentence_with_fallback(word, definition if definition else None),
+            self._apply_sentence_result,
+            "Failed to generate sentence",
+        )
 
-        try:
-            definition = self.definition_input.toPlainText().strip()
-            # Try Tatoeba first, fall back to AI if not found
-            sentence = get_sentence_with_fallback(word, definition if definition else None)
-            self.sentence_input.setPlainText(sentence)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to generate sentence:\n{str(e)}")
-        finally:
-            progress.close()
+    def _apply_sentence_result(self, sentence: object):
+        """Apply a generated sentence."""
+        self.sentence_input.setPlainText(str(sentence))
 
     def _generate_translation(self):
         """Generate translation using Google Gemini."""
@@ -636,17 +800,18 @@ class CardCreatorDialog(QDialog):
             QMessageBox.warning(self, "Warning", "Please enter or generate a sentence first.")
             return
 
-        progress = QProgressDialog("Generating translation...", None, 0, 0, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
+        self._start_generation_task(
+            "translation",
+            self.generate_translation_btn,
+            "Generating...",
+            lambda: translate_sentence(sentence),
+            self._apply_translation_result,
+            "Failed to generate translation",
+        )
 
-        try:
-            translation = translate_sentence(sentence)
-            self.translation_input.setPlainText(translation)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to generate translation:\n{str(e)}")
-        finally:
-            progress.close()
+    def _apply_translation_result(self, translation: object):
+        """Apply a generated translation."""
+        self.translation_input.setPlainText(str(translation))
 
     def _generate_sentence_audio(self):
         """Generate audio for the sentence."""
@@ -655,17 +820,19 @@ class CardCreatorDialog(QDialog):
             QMessageBox.warning(self, "Warning", "Please enter or generate a sentence first.")
             return
 
-        progress = QProgressDialog("Generating sentence audio...", None, 0, 0, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
+        self._start_generation_task(
+            "sentence_audio",
+            self.generate_sentence_audio_btn,
+            "Generating...",
+            lambda: generate_sentence_audio(sentence),
+            self._apply_sentence_audio_result,
+            "Failed to generate audio",
+        )
 
-        try:
-            self.sentence_audio_tag = generate_sentence_audio(sentence)
-            self.play_sentence_audio_btn.setEnabled(True)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to generate audio:\n{str(e)}")
-        finally:
-            progress.close()
+    def _apply_sentence_audio_result(self, sound_tag: object):
+        """Apply generated sentence audio."""
+        self.sentence_audio_tag = str(sound_tag)
+        self.play_sentence_audio_btn.setEnabled(True)
 
     def _generate_word_audio(self):
         """Generate audio for the word."""
@@ -674,17 +841,19 @@ class CardCreatorDialog(QDialog):
             QMessageBox.warning(self, "Warning", "Please enter a target word first.")
             return
 
-        progress = QProgressDialog("Generating word audio...", None, 0, 0, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
+        self._start_generation_task(
+            "word_audio",
+            self.generate_word_audio_btn,
+            "Generating...",
+            lambda: generate_word_audio(word),
+            self._apply_word_audio_result,
+            "Failed to generate audio",
+        )
 
-        try:
-            self.word_audio_tag = generate_word_audio(word)
-            self.play_word_audio_btn.setEnabled(True)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to generate audio:\n{str(e)}")
-        finally:
-            progress.close()
+    def _apply_word_audio_result(self, sound_tag: object):
+        """Apply generated word audio."""
+        self.word_audio_tag = str(sound_tag)
+        self.play_word_audio_btn.setEnabled(True)
 
     def _generate_all(self):
         """Generate all missing fields."""
@@ -693,48 +862,95 @@ class CardCreatorDialog(QDialog):
             QMessageBox.warning(self, "Warning", "Please enter a target word first.")
             return
 
-        progress = QProgressDialog("Generating all fields...", None, 0, 0, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
+        self._set_generate_all_active(True)
+        started_any = False
 
-        try:
-            # 1. Lookup definition if empty
-            if not self.definition_input.toPlainText().strip():
-                definition = lookup_word(word)
-                if definition:
-                    self.definition_input.setPlainText(definition)
+        # Word audio is independent, so it can run immediately.
+        if not self.word_audio_tag:
+            started_any = self._start_generate_all_task(
+                "word_audio",
+                self.generate_word_audio_btn,
+                "Generating...",
+                lambda word=word: generate_word_audio(word),
+                self._apply_word_audio_result,
+                "Failed to generate word audio",
+            ) or started_any
 
-            # 2. Generate sentence and translation if empty
-            if not self.sentence_input.toPlainText().strip():
-                definition = self.definition_input.toPlainText().strip()
-                # Try Tatoeba first (which includes translation), fall back to AI
-                sentence, translation = generate_and_translate(word, definition if definition else None)
-                self.sentence_input.setPlainText(sentence)
-                # If translation wasn't already filled, set it
-                if not self.translation_input.toPlainText().strip() and translation:
-                    self.translation_input.setPlainText(translation)
-            elif not self.translation_input.toPlainText().strip():
-                # Sentence exists but translation doesn't - generate translation
-                sentence = self.sentence_input.toPlainText().strip()
-                if sentence:
-                    translation = translate_sentence(sentence)
-                    self.translation_input.setPlainText(translation)
+        if not self.definition_input.toPlainText().strip():
+            started_any = self._start_generate_all_task(
+                "definition",
+                self.lookup_definition_btn,
+                "Looking...",
+                lambda word=word: lookup_word(word),
+                lambda definition, word=word: self._apply_generate_all_definition(definition, word),
+                "Failed to look up definition",
+            ) or started_any
+        else:
+            started_any = self._continue_generate_all_after_definition(word) or started_any
 
-            # 4. Generate word audio if not generated
-            if not self.word_audio_tag:
-                self.word_audio_tag = generate_word_audio(word)
-                self.play_word_audio_btn.setEnabled(True)
+        if not started_any:
+            self._set_generate_all_active(False)
 
-            # 5. Generate sentence audio if not generated
-            sentence = self.sentence_input.toPlainText().strip()
-            if sentence and not self.sentence_audio_tag:
-                self.sentence_audio_tag = generate_sentence_audio(sentence)
-                self.play_sentence_audio_btn.setEnabled(True)
+    def _apply_generate_all_definition(self, definition: object, word: str):
+        """Apply definition result and continue Generate All dependencies."""
+        self._apply_definition_result(definition)
+        self._continue_generate_all_after_definition(word)
 
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to generate fields:\n{str(e)}")
-        finally:
-            progress.close()
+    def _continue_generate_all_after_definition(self, word: str) -> bool:
+        """Continue Generate All after definition is available."""
+        sentence = self.sentence_input.toPlainText().strip()
+        translation = self.translation_input.toPlainText().strip()
+        definition = self.definition_input.toPlainText().strip()
+
+        if not sentence:
+            return self._start_generate_all_task(
+                "sentence_translation",
+                [self.generate_sentence_btn, self.generate_translation_btn],
+                "Generating...",
+                lambda word=word, definition=definition: generate_and_translate(word, definition if definition else None),
+                self._apply_generate_all_sentence_translation,
+                "Failed to generate sentence and translation",
+            )
+
+        if not translation:
+            return self._start_generate_all_task(
+                "translation",
+                self.generate_translation_btn,
+                "Generating...",
+                lambda sentence=sentence: translate_sentence(sentence),
+                lambda translation: self._apply_generate_all_translation(translation),
+                "Failed to generate translation",
+            )
+
+        return self._start_generate_all_sentence_audio()
+
+    def _apply_generate_all_sentence_translation(self, result: object):
+        """Apply combined sentence/translation result and continue audio generation."""
+        sentence, translation = result
+        self.sentence_input.setPlainText(sentence)
+        if translation and not self.translation_input.toPlainText().strip():
+            self.translation_input.setPlainText(translation)
+        self._start_generate_all_sentence_audio()
+
+    def _apply_generate_all_translation(self, translation: object):
+        """Apply translation result and continue audio generation."""
+        self._apply_translation_result(translation)
+        self._start_generate_all_sentence_audio()
+
+    def _start_generate_all_sentence_audio(self) -> bool:
+        """Start sentence audio generation if Generate All still needs it."""
+        sentence = self.sentence_input.toPlainText().strip()
+        if not sentence or self.sentence_audio_tag:
+            return False
+
+        return self._start_generate_all_task(
+            "sentence_audio",
+            self.generate_sentence_audio_btn,
+            "Generating...",
+            lambda sentence=sentence: generate_sentence_audio(sentence),
+            self._apply_sentence_audio_result,
+            "Failed to generate sentence audio",
+        )
 
     def _save_card(self):
         """Save the card to Anki."""
@@ -828,4 +1044,8 @@ class CardCreatorDialog(QDialog):
         if self._details_worker and self._details_worker.isRunning():
             self._details_worker.terminate()
             self._details_worker.wait()
+        for worker in list(self._generation_workers.values()):
+            if worker.isRunning():
+                worker.terminate()
+                worker.wait()
         super().closeEvent(event)
